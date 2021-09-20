@@ -1,0 +1,38 @@
+<resources>
+
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:background">@color/black_overlay</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="windowActionModeOverlay">true</item>
+        <item name="actionModeStyle">@style/MyActionMode</item>
+        <item name="actionBarPopupTheme">@style/ActionModeOverflowMenu</item>
+    </style>
+
+    <style name="ToolbarTheme" parent="@style/ThemeOverlay.AppCompat.Dark.ActionBar">
+        <!-- android:textColorPrimary is the color of the title text in the Toolbar  -->
+        <item name="android:textColorPrimary">@color/white</item>
+        <item name="android:textColor">@color/white</item>
+    </style>
+
+    <style name="MyActionMode" parent="Widget.AppCompat.ActionMode">
+        <item name="android:textColorPrimary">@color/white</item>
+        <item name="background">@color/gray</item>
+        <item name="backgroundSplit">?attr/actionModeSplitBackground</item>
+        <item name="height">?attr/actionBarSize</item>
+        <item name="titleTextStyle">@style/ActionMode.MyTitle</item>
+    </style>
+
+    <style name="ActionMode.MyTitle" parent="TextAppearance.AppCompat.Widget.ActionMode.Title">
+        <item name="android:textColor">@color/white</item>
+        <item name="android:textColorPrimary">@color/white</item>
+    </style>
+
+    <style name="ActionModeOverflowMenu" parent="Widget.AppCompat.ListPopupWindow">
+        <item name="android:textColor">@color/white</item>
+        <item name="android:background">@color/transparent</item>
+    </style>
+
+
+
+</resources>
