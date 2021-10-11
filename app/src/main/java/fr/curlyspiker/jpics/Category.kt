@@ -1,24 +1,102 @@
 package fr.curlyspiker.jpics
 
 import android.util.Log
+import kotlinx.coroutines.*
 import org.json.JSONObject
+import java.util.concurrent.Semaphore
+import kotlin.coroutines.suspendCoroutine
+
+interface CategoriesManagerListener {
+    fun onImagesReady(catId: Int?)
+    fun onCategoriesReady()
+}
 
 object CategoriesManager {
 
-    var categories: MutableList<Category> = mutableListOf()
+    var pictures = mutableMapOf<Int, Picture>()
+    var categories = mutableListOf<Category>()
+    private var listeners: MutableList<CategoriesManagerListener?> = mutableListOf()
 
-    init{
-        addCategory(Category(0, "Home"))
+    var currentlyDisplayedList: MutableList<Picture>? = mutableListOf()
+
+    init{ categories.add(Category(0, "Home")) }
+
+    fun addListener(l: CategoriesManagerListener?) {
+        listeners.add(l)
     }
 
-    fun addCategory(cat: Category) {
-        if (categories.indexOfFirst { c -> c.id == cat.id } == -1) {
-            categories.add(cat)
+    fun removeListener(l: CategoriesManagerListener) {
+        listeners.remove(l)
+    }
+
+    fun fromID(id: Int?): Category? {
+        return categories.firstOrNull { c->  c.id == id }
+    }
+
+    fun refreshAllPictures(callback: () -> Unit = {}) {
+
+        Log.d("TAG", "Refreshed all pictures, cats size: ${categories.size}")
+        categories.forEach { c ->
+            PiwigoSession.getPictures(listOf(c)) { success, pics ->
+                val cat = fromID(c.id)
+                cat?.let {
+                    cat.picturesIDs.clear()
+                    pics.forEach { p ->
+                        pictures[p.id] = p
+                        cat.picturesIDs.add(p.id)
+                    }
+                }
+            }
+        }
+        listeners.forEach { l -> l?.onImagesReady(null) }
+        callback()
+        Log.d("TAG", "Refreshed all pictures, received ${pictures.size} items")
+    }
+
+    fun refreshPictures(catId: Int?, callback: () -> Unit = {}) {
+        val c = fromID(catId)
+        if(c == null) {
+            refreshAllPictures(callback)
+        } else {
+            PiwigoSession.getPictures(listOf(c)) { success, pics ->
+                c.picturesIDs.clear()
+                pics.forEach { p ->
+                    pictures[p.id] = p
+                    c.picturesIDs.add(p.id)
+                }
+
+                listeners.forEach { l -> l?.onImagesReady(c.id) }
+                callback()
+            }
         }
     }
 
-    fun fromID(id: Int): Category? {
-        return categories.firstOrNull { c->  c.id == id }
+    fun getPictures(catId: Int? = null) : List<Picture>  {
+        return if(catId == null) {
+            pictures.values.toMutableList()
+        } else {
+            val cat = fromID(catId)
+            Log.d("TAG", "True cat ${cat?.name} has ${cat?.picturesIDs?.size} pictures")
+            fromID(catId)?.getPictures() ?: listOf()
+        }
+    }
+
+    fun refreshCategories(callback: () -> Unit) {
+        PiwigoSession.getCategories { success, cats ->
+            val newCats = cats.toMutableList()
+            newCats.add(fromID(0)!!)
+
+            newCats.forEach { c ->
+                val oldCat = categories.firstOrNull { it.id == c.id }
+                oldCat?.let {
+                    c.picturesIDs = oldCat.picturesIDs
+                }
+            }
+
+            categories = newCats
+            listeners.forEach { l -> l?.onCategoriesReady() }
+            callback()
+        }
     }
 }
 
@@ -30,9 +108,9 @@ class Category (
     ) {
 
     var thumbnailId: Int = -1
-    var thumbnailUrl: String = ""
+    private var thumbnailUrl: String = ""
 
-    var pictures : MutableList<Picture> = mutableListOf()
+    var picturesIDs = mutableListOf<Int>()
 
     companion object {
         fun fromJson(json: JSONObject) : Category {
@@ -56,23 +134,12 @@ class Category (
         }
     }
 
-    init {
-        val params = "&cat_id=${id}&per_page=${nPictures}"
-        Log.d("TAG", "params: $params")
-        PiwigoServerHelper.volleyGet("pwg.categories.getImages$params") { rsp ->
-            if(rsp.optString("stat") == "ok") {
-                val result = rsp.optJSONObject("result")
-                val images = result?.optJSONArray("images")
-
-                Log.d("TAG", "Received category $name pictures: ${images?.length()} pics")
-
-                images?.let {
-                    for (i in 0 until it.length()) {
-                        pictures.add(Picture.fromJson(it.optJSONObject(i)))
-                    }
-                }
-            }
+    fun getThumbnailUrl() : String {
+        if (thumbnailUrl.isEmpty()) {
+            val validPic = getPictures(true).firstOrNull { p -> p.thumbnailUrl.isNotEmpty() }
+            validPic?.let { thumbnailUrl = it.thumbnailUrl }
         }
+        return thumbnailUrl
     }
 
     fun getChildren(): List<Category> {
@@ -81,6 +148,16 @@ class Category (
 
     fun getParent() : Category? {
         return CategoriesManager.categories.firstOrNull { c -> c.id == parentId }
+    }
+
+    fun getPictures(recursive: Boolean = false) : List<Picture>  {
+
+        Log.d("TAG", "Cat $name has ${picturesIDs.size} pictures")
+        val out = CategoriesManager.pictures.values.filter { p -> picturesIDs.contains(p.id) }.toMutableList()
+        if(recursive) {
+            getChildren().forEach { c -> out.addAll(c.getPictures(true)) }
+        }
+        return out
     }
 
     fun getHierarchy() : List<Category> {

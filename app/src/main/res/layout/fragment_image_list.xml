@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".ImageListFragment"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/swipeContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content">
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <ImageView
+                    android:id="@+id/no_image_view"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:src="@drawable/no_image"
+                    android:scaleType="fitCenter"
+                    android:padding="150dp"
+                    android:visibility="visible"
+                    app:tint="@color/dark_gray" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/pictures_grid_view"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:footerDividersEnabled="false"
+                    android:padding="0dp"
+                    android:numColumns="3"
+                    android:background="@color/transparent"/>
+
+            </FrameLayout>
+
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+    </LinearLayout>
+
+    <ImageButton
+        android:id="@+id/add_image_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:elevation="10dp"
+        android:background="@drawable/add_button"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        android:contentDescription=""
+        android:layout_margin="40dp"/>
+
+    <LinearLayout
+        android:id="@+id/progress_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:layout_constraintBottom_toBottomOf="parent"
+        android:orientation="vertical"
+        android:visibility="invisible"
+        android:elevation="10dp"
+        android:background="@color/dark_blue"
+        android:padding="10dp">
+
+        <TextView
+            android:id="@+id/progress_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Uploading images..."
+            android:textColor="@color/white"
+            android:layout_marginBottom="10dp"/>
+
+        <ProgressBar
+            android:id="@+id/progress_bar"
+            style="@style/ProgressBarStyle"
+            android:layout_width="match_parent"
+            android:layout_height="3dp"
+            android:progress="50"/>
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

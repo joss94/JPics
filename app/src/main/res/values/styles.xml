@@ -1,21 +1,83 @@
 <resources>
 
-    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.Light.NoActionBar">
-        <item name="android:background">@color/black_overlay</item>
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.Light.DarkActionBar">
+        <item name="android:windowBackground">@color/black_overlay</item>
         <item name="windowNoTitle">true</item>
         <item name="android:windowFullscreen">false</item>
-        <item name="windowActionModeOverlay">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowActionBarOverlay">true</item>
         <item name="actionModeStyle">@style/MyActionMode</item>
         <item name="actionBarPopupTheme">@style/ActionModeOverflowMenu</item>
+        <item name="windowActionModeOverlay">true</item>
+        <item name="windowActionBarOverlay">true</item>
+        <item name="android:textColor">@color/white</item>
+        <item name="android:fastScrollThumbDrawable">@drawable/fast_thumb</item>
+        <item name="colorControlNormal">#c5c5c5</item>
+        <item name="editTextStyle">@style/App_EditTextStyle</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:progressBarStyle">@style/ProgressBarStyle</item>
+        <item name="android:buttonStyle">@style/ButtonStyle</item>
+        <item name="bottomSheetDialogTheme">@style/AppBottomSheetDialogTheme</item>
+    </style>
+
+    <style name="AppBottomSheetDialogTheme" parent="Theme.Design.Light.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/AppModalStyle</item>
+    </style>
+
+    <style name="AppModalStyle"
+        parent="Widget.Design.BottomSheet.Modal">
+        <item name="android:background">@drawable/rounded_dialog</item>
+    </style>
+
+    <style  name="ButtonStyle" parent="AppTheme.NoActionBar">
+        <item name="android:background">@drawable/button</item>
+        <item name="android:padding">8dp</item>
+        <item name="android:paddingEnd">15dp</item>
+        <item name="android:paddingStart">15dp</item>
+    </style>
+
+    <style name="ProgressBarStyle" parent="Widget.AppCompat.ProgressBar.Horizontal">
+        <item name="android:background">@color/light_blue_600</item>
+        <item name="android:progressDrawable">@drawable/progress_bar</item>
+    </style>
+
+    <style name="BottomViewStyle" parent="AppTheme.NoActionBar">
+        <item name="android:padding">5dp</item>
+        <item name="android:background">@color/dark_gray</item>
+    </style>
+
+    <style name="App_EditTextStyle" parent="@android:style/Widget.EditText">
+        <item name="android:background">@drawable/rounded_edittext</item>
+        <item name="android:textColor">@color/white</item>
+        <item name="android:textColorHint">@color/light_gray</item>
+        <item name="android:padding">5dp</item>
+        <item name="android:paddingStart">20dp</item>
+        <item name="android:paddingEnd">20dp</item>
+    </style>
+
+    <style name="ImageViewerTheme" parent="AppTheme.NoActionBar">
+        <item name="android:windowTranslucentNavigation">true</item>
+        <item name="android:windowActionBarOverlay">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:actionModeStyle">@style/ImageViewerActionMode</item>
+        <item name="actionModeStyle">@style/ImageViewerActionMode</item>
+        <item name="windowActionBarOverlay">true</item>
+        <item name="windowActionModeOverlay">true</item>
+        <item name="bottomSheetDialogTheme">@style/AppBottomSheetDialogTheme</item>
     </style>
 
     <style name="ToolbarTheme" parent="@style/ThemeOverlay.AppCompat.Dark.ActionBar">
-        <!-- android:textColorPrimary is the color of the title text in the Toolbar  -->
         <item name="android:textColorPrimary">@color/white</item>
         <item name="android:textColor">@color/white</item>
+        <item name="android:background">@color/dark_gray</item>
     </style>
 
-    <style name="MyActionMode" parent="Widget.AppCompat.ActionMode">
+    <style name="ImageViewerActionMode" parent="MyActionMode">
+        <item name="background">@color/transparent</item>
+    </style>
+
+    <style name="MyActionMode" parent="AppTheme.NoActionBar">
         <item name="android:textColorPrimary">@color/white</item>
         <item name="background">@color/gray</item>
         <item name="backgroundSplit">?attr/actionModeSplitBackground</item>
@@ -33,6 +95,28 @@
         <item name="android:background">@color/transparent</item>
     </style>
 
+    <style name="AlertStyle" parent="AppTheme.NoActionBar">
+        <item name="android:windowBackground">@color/black</item>
+        <item name="android:colorAccent">@color/white</item>
+        <item name="android:textColorAlertDialogListItem">@color/white</item>
+        <item name="android:textColorPrimary">@color/white</item>
+        <item name="android:textColor">@color/white</item>
+        <item name="android:windowIsFloating">true</item>
 
+        <item name="backgroundColor">@color/black</item>
+        <item name="background">@color/black</item>
+        <item name="textBackground">@color/black</item>
+
+        <item name="android:colorActivatedHighlight">@color/white</item>
+        <item name="android:colorControlActivated">@color/white</item>
+        <item name="colorControlNormal">@color/white</item>
+        <item name="colorControlActivated">@color/white</item>
+    </style>
+
+    <style name="infoBottomSheetStyle" parent="AppTheme.NoActionBar">
+        <item name="android:textColorPrimary">@color/white</item>
+        <item name="android:padding">10dp</item>
+        <item name="android:background">@color/transparent</item>
+    </style>
 
 </resources>

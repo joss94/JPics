@@ -10,18 +10,46 @@
     <androidx.appcompat.widget.Toolbar
         android:id="@+id/my_toolbar"
         android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
+        android:layout_height="90dp"
         app:menu="@menu/explorer_menu"
         android:theme="@style/ToolbarTheme"
-        app:title=""/>
+        app:title=""
+        android:paddingEnd="20dp"
+        android:paddingTop="30dp">
+
+        <ImageButton
+            android:id="@+id/account_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/account"
+            android:layout_gravity="right" />
+
+    </androidx.appcompat.widget.Toolbar>
 
 
-    <androidx.fragment.app.FragmentContainerView
-        android:id="@+id/fragment_container"
-        android:name="fr.curlyspiker.jpics.ExplorerFragment"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:keepScreenOn="true"
-        tools:context=".MainActivity" />
+        android:orientation="vertical">
+
+        <androidx.fragment.app.FragmentContainerView
+            android:id="@+id/fragment_container"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:keepScreenOn="true"
+            tools:context=".MainActivity" />
+
+        <com.google.android.material.bottomnavigation.BottomNavigationView
+            android:id="@+id/bottom_nav"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:menu="@menu/bottom_menu"
+            style="@style/BottomViewStyle"
+            app:itemIconTint="@color/bottom_nav_colors"
+            app:itemTextColor="@color/bottom_nav_colors"/>
+
+    </LinearLayout>
+
 
 </LinearLayout>

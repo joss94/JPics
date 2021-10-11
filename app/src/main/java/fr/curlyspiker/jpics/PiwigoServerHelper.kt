@@ -1,41 +1,46 @@
 package fr.curlyspiker.jpics
 
-import android.graphics.Bitmap
+import android.content.Context
 import android.util.Log
-import android.widget.ImageView
+import android.widget.Toast
 import com.android.volley.Request
 import com.android.volley.RequestQueue
-import com.android.volley.Response
-import com.android.volley.toolbox.ImageRequest
+import com.android.volley.VolleyError
+import com.android.volley.toolbox.JsonObjectRequest
 import com.android.volley.toolbox.StringRequest
-import com.android.volley.toolbox.Volley
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
-import java.lang.Exception
+import java.io.UnsupportedEncodingException
 import java.net.CookieHandler
 import java.net.CookieManager
+import java.net.URLEncoder
+
 
 object PiwigoServerHelper {
 
+    var serverUrl = ""
     private lateinit var requestQueue: RequestQueue
 
     fun initialize(queue: RequestQueue) {
-        // Use a cookie manager to handle automatically all cookies
         CookieHandler.setDefault(CookieManager())
-
         requestQueue = queue
     }
 
     fun volleyGet(command: String, cb : (JSONObject) -> Unit) {
         val url = "https://www.curlyspiker.fr/photo/piwigo/ws.php?format=json&method=$command"
-
-        val req = StringRequest (
-            Request.Method.GET, url,
+        val req = JsonObjectRequest (
+            Request.Method.GET, url, null,
             { response ->
-                try {
-                    cb(JSONObject(response))
-                } catch (e: JSONException) {
-                    e.printStackTrace()
+                GlobalScope.launch(Dispatchers.IO) {
+                    try {
+                        cb(response)
+                    } catch (e: JSONException) {
+                        e.printStackTrace()
+                    }
                 }
             },
             { error -> error.printStackTrace() }
@@ -44,50 +49,45 @@ object PiwigoServerHelper {
         requestQueue.add(req)
     }
 
-    fun volleyPost(params: Map<String, String>, cb : (JSONObject) -> Unit) {
+    fun volleyPost(params: JSONObject, cb : (JSONObject) -> Unit) {
         val url = "https://www.curlyspiker.fr/photo/piwigo/ws.php?format=json"
 
-        val req = object : StringRequest(
+        val req = object: StringRequest(
             Request.Method.POST, url,
-            Response.Listener { response ->
-                cb(JSONObject(response))
+            { response ->
+                GlobalScope.launch(Dispatchers.IO) {
+                    cb(JSONObject(response))
+                }
             },
-            Response.ErrorListener { error ->
-                Log.d("JP", "Error in POST request")
+            { error ->
+                Log.d("JP", "Error in POST request (req: ${String(error.networkResponse.data, Charsets.UTF_8)})")
+                cb(JSONObject())
                 error.printStackTrace()
             }
         ) {
-            override fun getParams(): Map<String, String> {
-                return params
+            override fun getBody(): ByteArray {
+                var content = ""
+                params.keys().forEach { key ->
+                    val obj = params[key]
+                    if(obj is JSONArray) {
+                        content += "&$key[]="
+                        for(i in 0 until obj.length()) {
+                            content += URLEncoder.encode(obj[i].toString(), "utf-8")
+                            if(i < obj.length() - 1) {
+                                content += ","
+                            }
+                        }
+                    } else {
+                        val txt = URLEncoder.encode(obj.toString(), "utf-8")
+                        content += "&$key=$txt"
+                    }
+                }
+                return content.toByteArray(Charsets.US_ASCII)
             }
         }
 
+
+        Log.d("TAG", "Req map: ${String(req.body, Charsets.US_ASCII)}")
         requestQueue.add(req)
     }
-
-    fun volleyImage(url: String, maxW: Int, maxH: Int, cb: (Bitmap) -> Unit) {
-        val req = ImageRequest (
-            url,
-            { bmp ->
-                try {
-                    cb(bmp)
-                } catch (e: Exception) {
-                    Log.d("JP", "Problem with picture URL: $url")
-                    e.printStackTrace()
-                }
-            },
-            maxW, maxH, ImageView.ScaleType.CENTER_INSIDE, Bitmap.Config.ARGB_8888,
-            { error ->
-                Log.d("JP", "Problem with picture URL: $url")
-                error.printStackTrace()
-            }
-        )
-
-        requestQueue.add(req)
-    }
-
-    fun cancelAllOngoing() {
-        requestQueue.cancelAll { true }
-    }
-
 }

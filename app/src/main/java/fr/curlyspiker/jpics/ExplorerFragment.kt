@@ -1,257 +1,517 @@
 package fr.curlyspiker.jpics
 
-import android.Manifest
+import android.app.AlertDialog
 import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.drawable.Drawable
+import android.content.DialogInterface
 import android.os.Bundle
-import android.os.Environment
+import android.text.InputType
 import android.text.TextUtils
 import android.util.AttributeSet
 import android.util.Log
 import android.view.*
+import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import androidx.activity.OnBackPressedCallback
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.ContextCompat
-import androidx.core.content.ContextCompat.startActivity
+import androidx.core.content.ContextCompat.getSystemService
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import com.google.android.material.bottomsheet.BottomSheetBehavior
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.squareup.picasso.Picasso
-import com.squareup.picasso.Picasso.LoadedFrom
-import java.io.File
-import java.io.FileOutputStream
 
+class ExplorerFragment (private var startCat: Category? = null) :
+    Fragment(),
+    CategoriesManagerListener, PiwigoSession.UploadImageListener {
 
-class ExplorerFragment : Fragment() {
+    private lateinit var mContext : Context
+    private lateinit var swipeContainer: SwipeRefreshLayout
 
-    private lateinit var categoriesRecyclerView: RecyclerView
-    private lateinit var categoriesRecycleViewAdapter: CategoryListAdapter
+    private lateinit var progressLayout: LinearLayout
+    private lateinit var progressBar: ProgressBar
+    private lateinit var progressTitle: TextView
 
-    private lateinit var picturesGridView: GridView
-    private lateinit var picturesGidViewAdapter: PicturesListAdapter
+    private lateinit var categoriesView: RecyclerView
+    private var categoriesAdapter: CategoryListAdapter? = null
 
+    private lateinit var selectCategoriesView: RecyclerView
+    private var selectCategoryListAdapter: SelectCategoryListAdapter? = null
+    private lateinit var selectCategoriesOkButton: Button
+    private lateinit var selectCategoriesBackButton: Button
+
+    private lateinit var albumTitleLayout: LinearLayout
+    private lateinit var albumTitleEditLayout: LinearLayout
     private lateinit var albumPathLayout: LinearLayout
+    private lateinit var albumTitle: TextView
+    private lateinit var albumTitleEdit: EditText
+    private lateinit var albumEditButton: ImageButton
+    private lateinit var albumEditConfirmButton: ImageButton
 
-    private val onBackPressHandler = object : OnBackPressedCallback(true) {
-        override fun handleOnBackPressed() {
-            changeCategory(categoriesRecycleViewAdapter.currentCategory.getParent())
-        }
-    }
+    private var imagesListFragment: ImageListFragment = ImageListFragment(startCat)
 
-    val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
-        if (isGranted) { downloadImagesPermissionGranted() }
-    }
+    private lateinit var categorySelectBottomSheet: BottomSheetBehavior<View>
 
-    override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View? {
+    var currentCategory: Category = CategoriesManager.fromID(0)!!
 
-        // Inflate the layout for this fragment
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_explorer, container, false)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        mContext = requireContext()
+
+        categorySelectBottomSheet = BottomSheetBehavior.from(view.findViewById(R.id.cat_select_bottom_sheet))
+        categorySelectBottomSheet.state = BottomSheetBehavior.STATE_HIDDEN
+        categorySelectBottomSheet.isFitToContents = false
+        categorySelectBottomSheet.halfExpandedRatio = 0.3f
+        categorySelectBottomSheet.peekHeight = 100
+
+        progressLayout = view.findViewById(R.id.progress_layout)
+        progressBar = view.findViewById(R.id.progress_bar)
+        progressTitle = view.findViewById(R.id.progress_title)
+
+        swipeContainer = view.findViewById(R.id.swipeContainer)
+
+        albumTitleLayout = view.findViewById(R.id.album_title_layout)
+        albumTitleEditLayout = view.findViewById(R.id.album_title_edit_layout)
         albumPathLayout = view.findViewById(R.id.album_path_layout)
+        albumTitle = view.findViewById(R.id.album_name)
+        albumTitleEdit = view.findViewById(R.id.album_name_edit)
+        albumEditButton = view.findViewById(R.id.album_edit_button)
+        albumEditConfirmButton = view.findViewById(R.id.album_edit_confirm_button)
 
-        categoriesRecyclerView = view.findViewById(R.id.categories_grid_view)
-        picturesGridView = view.findViewById(R.id.pictures_grid_view)
+        albumEditButton.setOnClickListener {
+            setAlbumTitleEditMode(true)
+        }
 
-        categoriesRecycleViewAdapter = CategoryListAdapter(this)
-        categoriesRecyclerView.layoutManager = LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false)
-        categoriesRecyclerView.adapter  = categoriesRecycleViewAdapter
-
-        picturesGidViewAdapter = PicturesListAdapter(this)
-        picturesGridView.adapter  = picturesGidViewAdapter
-        picturesGridView.choiceMode = GridView.CHOICE_MODE_MULTIPLE_MODAL
-        picturesGridView.setMultiChoiceModeListener(object: AbsListView.MultiChoiceModeListener {
-            override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
-                val menuInflater: MenuInflater? = mode?.menuInflater
-                menuInflater?.inflate(R.menu.explorer_menu, menu)
-                picturesGidViewAdapter.selecting = true
-
-                return true
-            }
-
-            override fun onPrepareActionMode(mode: ActionMode?, p1: Menu?): Boolean {
-                mode?.customView?.setBackgroundColor(ContextCompat.getColor(requireContext(), R.color.white))
-                return true
-            }
-
-            override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
-                return when (item?.itemId) {
-                    R.id.action_download -> {
-                        downloadSelectedImages()
-                        mode?.finish() // Action picked, so close the CAB
-                        true
-                    }
-                    else -> false
+        albumEditConfirmButton.setOnClickListener {
+            PiwigoSession.updateCategory(currentCategory.id, albumTitleEdit.text.toString()) {
+                refreshCategories()
+                requireActivity().runOnUiThread {
+                    setAlbumTitleEditMode(false)
                 }
             }
+        }
 
-            override fun onDestroyActionMode(p0: ActionMode?) {
-                picturesGidViewAdapter.selecting = false
+        categoriesView = view.findViewById(R.id.categories_grid_view)
+        categoriesAdapter = CategoryListAdapter(this)
+        categoriesView.layoutManager = LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false)
+        categoriesView.adapter  = categoriesAdapter
+
+        selectCategoriesView = view.findViewById(R.id.select_categories_list_view)
+        selectCategoriesView.isNestedScrollingEnabled = true
+        selectCategoryListAdapter = SelectCategoryListAdapter(this)
+        selectCategoriesView.layoutManager = LinearLayoutManager(requireContext(), LinearLayoutManager.VERTICAL, false)
+        selectCategoriesView.adapter = selectCategoryListAdapter
+
+        selectCategoriesOkButton = view.findViewById(R.id.select_cat_ok)
+        selectCategoriesBackButton = view.findViewById(R.id.select_cat_back)
+
+        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if(albumTitleEditLayout.isVisible) {
+                    setAlbumTitleEditMode(false)
+                } else {
+                    val parent = currentCategory.getParent()
+                    if (parent != null) {
+                        changeCategory(parent)
+                    } else {
+                        activity?.moveTaskToBack(true)
+                    }
+                }
             }
-
-            override fun onItemCheckedStateChanged(
-                p0: ActionMode?,
-                p1: Int,
-                p2: Long,
-                p3: Boolean
-            ) {
-
-            }
-
         })
 
-        checkStatus()
-        login("joss", "Cgyn76&cgyn76")
-
-        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, onBackPressHandler)
-        onBackPressHandler.isEnabled = false
-    }
-
-    fun downloadSelectedImages() {
-        if(ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
-            downloadImagesPermissionGranted()
+        if(savedInstanceState != null) {
+            startCat = CategoriesManager.fromID(savedInstanceState.getInt("cat_id"))
         }
-        else {
-            requestPermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+
+        val fragmentManager = requireActivity().supportFragmentManager
+        val transaction = fragmentManager.beginTransaction()
+        transaction.replace(R.id.image_list_fragment, imagesListFragment)
+        transaction.commitAllowingStateLoss()
+
+        CategoriesManager.addListener(this)
+        changeCategory(startCat)
+
+        swipeContainer.setOnRefreshListener {
+            refreshCategories()
         }
-    }
 
-    fun downloadImagesPermissionGranted() {
-        val ids = picturesGridView.checkedItemPositions
-        for(i in 0 until ids.size()) {
-            if(ids.valueAt(i)) {
+        categoriesAdapter?.selectionListener = object : CategoryListAdapter.SelectionListener {
 
-                val pic = picturesGidViewAdapter.pictures[i]
+            var actionModeMenu : Menu? = null
 
-                val target = object : com.squareup.picasso.Target {
+            override fun onSelectionEnabled() {
+                requireActivity().startActionMode(object: ActionMode.Callback {
 
-                    override fun onBitmapLoaded(bitmap: Bitmap, arg1: LoadedFrom?) {
-                        try {
-                            var file: File?
-                            val folder = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).path + "/JPics")
-                            if(!folder.exists()) {
-                                folder.mkdirs()
-                            }
-                            file = File(folder.path + File.separator + pic.name + ".jpg")
-                            file.createNewFile()
-                            val ostream = FileOutputStream(file)
-                            bitmap.compress(Bitmap.CompressFormat.JPEG, 80, ostream)
-                            ostream.close()
-                        } catch (e: Exception) {
-                            e.printStackTrace()
+                    override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
+                        val menuInflater: MenuInflater? = mode?.menuInflater
+                        menuInflater?.inflate(R.menu.explorer_category_menu, menu)
+                        categoriesAdapter?.selecting = true
+                        return true
+                    }
+
+                    override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
+                        var out = true
+                        when (item?.itemId) {
+                            R.id.action_move -> moveSelectedCategories()
+                            R.id.action_delete -> deleteSelectedCategories()
+                            else -> out = false
                         }
+                        if(out) mode?.finish()
+                        return out
                     }
 
-                    override fun onBitmapFailed(errorDrawable: Drawable?) {
-                        Log.d("TAG", "Error during download !")
+                    override fun onDestroyActionMode(p0: ActionMode?) {
+                        categoriesAdapter?.exitSelectionMode()
+                        categoriesView.invalidate()
                     }
-                    override fun onPrepareLoad(placeHolderDrawable: Drawable?) {}
+
+                    override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean {
+                        actionModeMenu = menu
+                        return true
+                    }
+                })
+            }
+
+            override fun onSelectionChanged() {}
+        }
+
+        refreshCategories()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putInt("cat_id", currentCategory.id)
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        CategoriesManager.removeListener(this)
+    }
+
+    private fun setAlbumTitleEditMode(editing: Boolean) {
+        val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        if(editing) {
+            albumTitleLayout.visibility = View.GONE
+            albumTitleEditLayout.visibility = View.VISIBLE
+            albumTitleEdit.requestFocus()
+            albumTitleEdit.setSelection(albumTitleEdit.length())
+            imm.showSoftInput(albumTitleEdit, InputMethodManager.SHOW_IMPLICIT)
+        } else {
+            albumTitleLayout.visibility = View.VISIBLE
+            albumTitleEditLayout.visibility = View.GONE
+            albumTitleEdit.clearFocus()
+            imm.hideSoftInputFromWindow(albumTitleEdit.windowToken, 0);
+        }
+    }
+
+    private fun refreshCategories() {
+        activity?.runOnUiThread {
+            swipeContainer.isRefreshing = true
+            swipeContainer.visibility = View.VISIBLE
+
+            CategoriesManager.refreshCategories {
+                activity?.runOnUiThread {
+                    currentCategory = CategoriesManager.fromID(currentCategory.id) ?: currentCategory
+                    swipeContainer.isRefreshing = false
+                    updateViews()
+                    categoriesAdapter?.refresh()
                 }
-                Picasso.with(requireContext()).load(pic.fullResUrl).into(target)
             }
         }
+    }
+
+    private fun updateViews() {
+        albumTitle.text = currentCategory.name
+        albumTitleEdit.setText(currentCategory.name)
+        albumPathLayout.visibility = if(currentCategory.getParent() == null) View.GONE else View.VISIBLE
+
+        albumPathLayout.removeAllViews()
+        val parents = currentCategory.getHierarchy()
+        for(i in parents.indices) {
+            val p = parents[i]
+            val isLast = i == parents.size - 1
+
+            val textView = TextView(mContext)
+            textView.setTextColor(ContextCompat.getColor(mContext, R.color.white))
+            textView.textSize = 15.0f
+            var txt = "${p.name}"
+            if(!isLast) {
+                textView.ellipsize = TextUtils.TruncateAt.END
+                txt += " > "
+            }
+            textView.text = txt
+            textView.maxLines = 1
+            textView.setOnClickListener { changeCategory(p) }
+            albumPathLayout.addView(textView)
+        }
+
+        albumEditButton.visibility = if(currentCategory.id != 0) View.VISIBLE else View.GONE
     }
 
     fun changeCategory(c : Category?) {
         c?.let {
-            //PiwigoServerHelper.cancelAllOngoing()
+            currentCategory = c
+            imagesListFragment.setCategory(c)
 
-            categoriesRecycleViewAdapter.currentCategory = c
-            picturesGidViewAdapter.currentCategory = c
+            categoriesAdapter?.refresh()
 
-            onBackPressHandler.isEnabled = c.id != 0
+            swipeContainer.visibility = if(swipeContainer.isRefreshing || c.getChildren().isNotEmpty()) View.VISIBLE else View.GONE
 
-            categoriesRecyclerView.visibility = if(c.getChildren().isNotEmpty()) View.VISIBLE else View.INVISIBLE
+            setAlbumTitleEditMode(false)
+            updateViews()
+        }
+    }
 
-            albumPathLayout.removeAllViews()
-            val parents = c.getHierarchy()
-            for(p in parents) {
-                val textView = TextView(requireContext())
-                textView.setTextColor(ContextCompat.getColor(requireContext(), R.color.white))
-                textView.textSize = 20.0f
-                textView.text = "${p.name} > "
-                textView.ellipsize = TextUtils.TruncateAt.END
-                textView.maxLines = 1
-                textView.setOnClickListener {
-                    changeCategory(p)
+    fun addCategory() {
+        val builder: AlertDialog.Builder = AlertDialog.Builder(requireContext(), R.style.AlertStyle)
+        builder.setTitle("Create a new album")
+
+        val input = EditText(requireContext())
+        input.setHint("Name of new album")
+        input.inputType = InputType.TYPE_CLASS_TEXT
+        builder.setView(input)
+
+        builder.setPositiveButton("OK") { dialog, _ ->
+            var name = input.text.toString()
+            PiwigoSession.addCategory(name, currentCategory.getParent()?.id) {
+                refreshCategories()
+            }
+            dialog.dismiss()
+        }
+
+        builder.setNegativeButton("Cancel") { dialog, _ -> dialog.cancel() }
+
+        builder.show()
+    }
+
+    fun deleteSelectedCategories() {
+        categoriesAdapter?.let { adapter ->
+            val selectedCategories = adapter.getSelectedCategories()
+            AlertDialog.Builder(requireContext(), R.style.AlertStyle)
+                .setTitle("Delete categories")
+                .setMessage("Are you sure you want to delete these categories?")
+                .setIcon(android.R.drawable.ic_dialog_alert)
+                .setPositiveButton("Yes") { _, _ -> PiwigoSession.deleteCategories(selectedCategories, this) }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+    }
+
+    private fun moveSelectedCategories() {
+        categoriesAdapter?.let { adapter ->
+            val selectedCategories = adapter.getSelectedCategories()
+            val excludeList = selectedCategories.toMutableList()
+            excludeList.add(currentCategory)
+            selectCategory(excludeList) { c ->
+                c?.let {
+                    PiwigoSession.moveCategories(selectedCategories, c.id, this)
                 }
-                albumPathLayout.addView(textView)
             }
         }
     }
 
+    private fun editSelectedCategory() {
+        val bottomSheetDialog = BottomSheetDialog(requireContext())
+        bottomSheetDialog.setContentView(R.layout.activity_login)
 
-    private fun login(username: String, password: String) {
+        bottomSheetDialog.show();
+    }
 
-        Log.d("JP", "Trying to connect as $username...")
-        val params: MutableMap<String, String> = HashMap()
-        params["method"] = "pwg.session.login"
-        params["username"] = username
-        params["password"] = password
+    private fun selectCategory(excludeList : List<Category> = listOf(), callback: (cat: Category?) -> Unit) {
 
-        PiwigoServerHelper.volleyPost(params) { rsp ->
-            if (rsp.optBoolean("result", false)) {
-                Log.d("JP", "Login successful !")
-                checkStatus()
-                getCategories()
+        val builder = AlertDialog.Builder(requireContext(), R.style.AlertStyle)
+        builder.setTitle("Select an album")
+
+        val labels = mutableListOf<String>()
+        val catIDs = mutableListOf<Int>()
+        CategoriesManager.categories.forEach { c ->
+            if(!excludeList.contains(c)) {
+                labels.add(c.name)
+                catIDs.add(c.id)
             }
-            else {
-                Log.d("JP", "Connection failed: ${rsp.optString("message", "Unknown error")}")
+        }
+
+        builder.setSingleChoiceItems(labels.toTypedArray(), -1) { dialog: DialogInterface, i: Int ->
+                dialog.dismiss()
+                callback(CategoriesManager.fromID(catIDs[i]))
             }
+
+        builder.setNeutralButton("Cancel") { _: DialogInterface, i: Int -> callback(null) }
+
+        builder.create().show()
+
+        /*
+        selectCategoriesOkButton.setOnClickListener {
+            callback(selectCategoryListAdapter?.currentCategory)
+            categorySelectBottomSheet.state = BottomSheetBehavior.STATE_HIDDEN
+        }
+        selectCategoriesBackButton.setOnClickListener {
+            selectCategoryListAdapter?.currentCategory = selectCategoryListAdapter?.currentCategory?.getParent() ?: CategoriesManager.fromID(0)!!
+        }
+        categorySelectBottomSheet.state = BottomSheetBehavior.STATE_HALF_EXPANDED
+         */
+    }
+
+    override fun onImagesReady(catId: Int?) {}
+
+    override fun onCategoriesReady() {
+        categoriesAdapter?.refresh()
+        selectCategoryListAdapter?.refresh()
+        activity?.runOnUiThread {
+            swipeContainer.visibility = if(currentCategory.getChildren().isNotEmpty()) View.VISIBLE else View.GONE
         }
     }
 
-    private fun checkStatus() {
-        PiwigoServerHelper.volleyGet("pwg.session.getStatus") { rsp ->
-            val status = rsp.getJSONObject("result")
-            Log.d("JP", "Connected user: ${status.optString("username", "unknown")}")
+    override fun onStarted() {
+        activity?.runOnUiThread {
+            progressLayout.visibility = View.VISIBLE
+            progressBar.progress = 0
+            progressTitle.text = "Processing categories (0%)"
         }
     }
 
-    private fun getCategories() {
-        PiwigoServerHelper.volleyGet("pwg.categories.getList&recursive=true") { rsp ->
-            if (rsp.optString("stat") == "ok") {
-                val result = rsp.getJSONObject("result")
-                val categories = result.optJSONArray("categories")
-                categories?.let {
+    override fun onCompleted() {
+        activity?.runOnUiThread {
+            refreshCategories()
+            progressLayout.visibility = View.GONE
+        }
+    }
 
-                    // Add categories to CategoriesManager
-                    for(i in 0 until it.length()) {
-                        Log.d("JP", "Found category: ${it.optJSONObject(i).optString("name")}")
-                        CategoriesManager.addCategory(Category.fromJson(it.optJSONObject(i)))
+    override fun onProgress(progress: Float) {
+        activity?.runOnUiThread {
+            val progressInt = (progress * 100).toInt()
+            progressBar.progress = progressInt
+            progressTitle.text = "Processing categories ($progressInt%)"
+        }
+    }
+
+    class CategoryListAdapter(private val fragment: ExplorerFragment) :
+        RecyclerView.Adapter<CategoryListAdapter.ViewHolder>(){
+
+        private var categories = mutableListOf<CategoryItem>()
+
+        var selecting: Boolean = false
+        var selectionListener: SelectionListener? = null
+
+        class CategoryItem(val category: Category) {
+            var checked = false
+        }
+
+        interface SelectionListener {
+            fun onSelectionEnabled()
+            fun onSelectionChanged()
+        }
+
+        fun refresh() {
+            categories.clear()
+            fragment.currentCategory.getChildren().forEach { c -> categories.add(CategoryItem(c)) }
+            fragment.activity?.runOnUiThread {
+                notifyDataSetChanged()
+            }
+        }
+
+        fun getSelectedCategories() : List<Category> {
+            val out = mutableListOf<Category>()
+            categories.filter { c -> c.checked }.forEach { out.add(it.category) }
+            return out
+        }
+
+        fun exitSelectionMode() {
+            selecting = false
+            categories.forEach { c -> c.checked = false }
+            notifyDataSetChanged()
+        }
+
+        private fun setItemChecked(index: Int, checked: Boolean) {
+            categories[index].checked = checked
+            if(checked) {
+                if(!selecting) {
+                    selecting = true
+                    selectionListener?.onSelectionEnabled()
+                }
+            }
+            notifyDataSetChanged()
+            selectionListener?.onSelectionChanged()
+        }
+
+        class ViewHolder (view: View) : RecyclerView.ViewHolder(view) {
+            val icon: ImageView = view.findViewById(R.id.cateogry_tile_image)
+            val title: TextView = view.findViewById(R.id.cateogry_tile_title)
+            val elementsLabel: TextView = view.findViewById(R.id.cateogry_tile_number_of_elements)
+            var checkBox: CheckBox = itemView.findViewById(R.id.image_tile_checkbox)
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+            return ViewHolder(LayoutInflater.from(fragment.requireContext()).inflate(R.layout.category_tile, parent, false))
+        }
+
+        override fun onBindViewHolder(vh: ViewHolder, position: Int) {
+            if(position == categories.size) {
+                vh.title.text = "New album"
+                vh.elementsLabel.text = ""
+                vh.icon.setImageDrawable(AppCompatResources.getDrawable(fragment.requireContext(), R.drawable.add_big))
+                vh.icon.setOnClickListener { fragment.addCategory() }
+            } else {
+                val item = categories[position]
+                val category = item.category
+
+                val checkbox : CheckBox = vh.checkBox
+
+                checkbox.visibility = if(selecting) View.VISIBLE else View.INVISIBLE
+                checkbox.isChecked = item.checked
+                checkbox.setOnClickListener { setItemChecked(position, !item.checked) }
+
+                vh.title.text = category.name
+                val nSubAlbums = category.getChildren().size
+                vh.elementsLabel.text = if (nSubAlbums > 0) "$nSubAlbums sub-albums" else ""
+
+                if (category.getThumbnailUrl().isNotEmpty()) {
+                    Picasso.with(fragment.requireContext()).load(category.getThumbnailUrl()).into(vh.icon)
+                } else {
+                    vh.icon.setImageDrawable(AppCompatResources.getDrawable(fragment.requireContext(), R.drawable.image_icon))
+                }
+
+                vh.icon.setOnClickListener {
+                    if(!selecting) {
+                        fragment.changeCategory(category)
+                    } else {
+                        setItemChecked(position, !item.checked)
                     }
                 }
 
-                changeCategory(CategoriesManager.fromID(0))
+                vh.icon.setOnLongClickListener {
+                    setItemChecked(position, true)
+                    true
+                }
             }
+        }
+
+        override fun getItemCount(): Int {
+            return if(selecting) categories.size else categories.size + 1
         }
     }
 
-    class CategoryListAdapter(private val fragment: ExplorerFragment) : RecyclerView.Adapter<CategoryListAdapter.ViewHolder>() {
+    class SelectCategoryListAdapter(private val fragment: ExplorerFragment) :
+        RecyclerView.Adapter<SelectCategoryListAdapter.ViewHolder>(){
 
-        private var mContext = fragment.requireContext()
-        var inflater: LayoutInflater = LayoutInflater.from(fragment.requireContext())
-        private var categories: List<Category> = listOf()
+        private var categories = mutableListOf<Category>()
+        var currentCategory = CategoriesManager.fromID(0)!!
 
-        var currentCategory: Category = CategoriesManager.fromID(0)!!
-            set(value) {
-                field = value
-                refreshCategories()
+        fun refresh() {
+            currentCategory = CategoriesManager.fromID(currentCategory.id) ?: CategoriesManager.fromID(0)!!
+            categories = currentCategory.getChildren().toMutableList()
+            fragment.activity?.runOnUiThread {
+                notifyDataSetChanged()
             }
-
-        private fun refreshCategories() {
-            categories = currentCategory.getChildren()
-            notifyDataSetChanged()
         }
 
         class ViewHolder (view: View) : RecyclerView.ViewHolder(view) {
@@ -261,8 +521,7 @@ class ExplorerFragment : Fragment() {
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-            val itemView = inflater.inflate(R.layout.category_tile, parent, false)
-            return ViewHolder(itemView)
+            return ViewHolder(LayoutInflater.from(fragment.requireContext()).inflate(R.layout.category_row, parent, false))
         }
 
         override fun onBindViewHolder(vh: ViewHolder, position: Int) {
@@ -272,12 +531,15 @@ class ExplorerFragment : Fragment() {
             val nSubAlbums = category.getChildren().size
             vh.elementsLabel.text = if (nSubAlbums > 0) "$nSubAlbums sub-albums" else ""
 
-            if (category.thumbnailUrl.isNotEmpty()) {
-                Picasso.with(mContext).load(category.thumbnailUrl).into(vh.icon)
+            if (category.getThumbnailUrl().isNotEmpty()) {
+                Picasso.with(fragment.requireContext()).load(category.getThumbnailUrl()).into(vh.icon)
+            } else {
+                vh.icon.setImageDrawable(AppCompatResources.getDrawable(fragment.requireContext(), R.drawable.image_icon))
             }
 
             vh.icon.setOnClickListener {
-                fragment.changeCategory(category)
+                currentCategory = category
+                refresh()
             }
         }
 
@@ -286,152 +548,24 @@ class ExplorerFragment : Fragment() {
         }
     }
 
-    class PicturesListAdapter(private val fragment: ExplorerFragment) : BaseAdapter() {
-
-        private val mContext = fragment.requireContext()
-
-        private var inflater: LayoutInflater = LayoutInflater.from(fragment.requireContext())
-
-        private var selectedItems: MutableList<Int> = mutableListOf()
-
-        var pictures : MutableList<Picture> = mutableListOf()
-
-        var selecting: Boolean = false
-            set(value) {
-                field=value
-                notifyDataSetChanged()
-            }
-
-        var currentCategory: Category = CategoriesManager.fromID(0)!!
-            set(value) {
-                field = value
-                refreshPictures()
-            }
-
-        private fun refreshPictures() {
-
-            pictures.clear()
-            notifyDataSetChanged()
-
-            val params = "&cat_id=${currentCategory.id}&per_page=${currentCategory.nPictures}"
-            PiwigoServerHelper.volleyGet("pwg.categories.getImages$params") { rsp ->
-                if(rsp.optString("stat") == "ok") {
-                    val result = rsp.optJSONObject("result")
-                    val images = result?.optJSONArray("images")
-
-                    images?.let {
-                        for (i in 0 until it.length()) {
-                            pictures.add(Picture.fromJson(it.optJSONObject(i)))
-                        }
-                        notifyDataSetChanged()
-                    }
-                }
-            }
-        }
-
-        override fun getCount(): Int {
-            return pictures.size
-        }
-
-        override fun getItem(p0: Int): Any {
-            return pictures[p0]
-        }
-
-        override fun getItemId(p0: Int): Long {
-            return (getItem(p0) as Picture).id.toLong()
-        }
-
-        override fun getView(p0: Int, p1: View?, parent: ViewGroup?): View {
-
-            val v: View = p1 ?: inflater.inflate(R.layout.image_tile, null) // inflate the layout
-            if(p1 == null) {
-                val icon: ImageView = v.findViewById(R.id.image_tile_image) as ImageView
-                val checkbox: CheckBox = v.findViewById(R.id.image_tile_checkbox) as CheckBox
-                val tile: CheckableRelativeLayout = v.findViewById(R.id.tile)
-                v.tag = ViewHolder(icon, checkbox, tile)
-            }
-
-            val gridView = parent as GridView
-
-            val vh = v.tag as ViewHolder
-            val icon: ImageView = vh.icon
-            val checkbox : CheckBox = vh.checkbox
-
-            val picture = getItem(p0) as Picture
-            Picasso.with(mContext).load(picture.thumbnailUrl).into(vh.icon)
-
-            checkbox.visibility = if(selecting) View.VISIBLE else View.INVISIBLE
-            checkbox.isChecked = gridView.isItemChecked(p0)
-
-            icon.setOnClickListener {
-                val intent = Intent(mContext,ImageViewerActivity::class.java)
-                intent.putExtra("cat_id", currentCategory.id)
-                intent.putExtra("img_index", p0)
-                startActivity(mContext, intent, null)
-            }
-
-            icon.setOnLongClickListener {
-                checkbox.isChecked = true
-                true
-            }
-
-            checkbox.setOnCheckedChangeListener { compoundButton, b ->
-                gridView.setItemChecked(p0, b)
-            }
-
-            return v
-        }
-
-        class ViewHolder (val icon: ImageView, val checkbox: CheckBox, val tile: CheckableRelativeLayout)
-    }
-
-
     class GridViewItem : androidx.appcompat.widget.AppCompatImageView {
+
+        private var isHorizontal = false
+
         constructor(context: Context) : super(context)
-        constructor(context: Context, attrs: AttributeSet?) : super(context, attrs)
-        constructor(context: Context, attrs: AttributeSet?, defStyle: Int) : super(context, attrs, defStyle)
+        constructor(context: Context, attrs: AttributeSet?) : super(context, attrs) { initializeAttributes(attrs) }
+        constructor(context: Context, attrs: AttributeSet?, defStyle: Int) : super(context, attrs, defStyle) { initializeAttributes(attrs) }
 
-        public override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-            super.onMeasure(widthMeasureSpec, widthMeasureSpec) // This is the key that will make the height equivalent to its width
-        }
-    }
-
-    class GridViewItemHorizontal : androidx.appcompat.widget.AppCompatImageView {
-        constructor(context: Context) : super(context)
-        constructor(context: Context, attrs: AttributeSet?) : super(context, attrs)
-        constructor(context: Context, attrs: AttributeSet?, defStyle: Int) : super(context, attrs, defStyle)
-
-        public override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-            super.onMeasure(heightMeasureSpec, heightMeasureSpec) // This is the key that will make the height equivalent to its width
-        }
-    }
-
-    class CheckableRelativeLayout(context: Context?, attrs: AttributeSet?) : RelativeLayout(context!!, attrs), Checkable {
-
-        private var mChecked = false
-
-        override fun setChecked(checked: Boolean) {
-            mChecked = checked
-            refreshDrawableState()
-        }
-
-        override fun isChecked(): Boolean {
-            return mChecked
-        }
-
-        override fun toggle() {
-            isChecked = !mChecked
-        }
-
-        // MAOR CODE
-        override fun onCreateDrawableState(extraSpace: Int): IntArray? {
-
-            val drawableState = super.onCreateDrawableState(extraSpace + 1)
-            if (isChecked) {
-                mergeDrawableStates(drawableState, intArrayOf(android.R.attr.state_checked))
+        private fun initializeAttributes(attrs: AttributeSet?) {
+            context.theme.obtainStyledAttributes(attrs, R.styleable.GridViewItem, 0, 0).apply {
+                try { isHorizontal = getInt(R.styleable.GridViewItem_listOrientation, 0) == 1 }
+                finally { recycle() }
             }
-            return drawableState
+        }
+
+        public override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val sz = if (isHorizontal) heightMeasureSpec else widthMeasureSpec
+            super.onMeasure(sz, sz)
         }
     }
-
 }

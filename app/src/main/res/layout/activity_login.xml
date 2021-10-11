@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".LoginActivity">
+
+    <LinearLayout
+        android:id="@+id/logo_layout"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/form_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center">
+
+        <ImageView
+            android:id="@+id/logo"
+            android:layout_width="150dp"
+            android:layout_height="150dp"
+            android:src="@drawable/logo" />
+
+        <TextView
+            android:id="@+id/logo_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="JPics"
+            android:textSize="40sp"/>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/form_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toBottomOf="@+id/logo_layout"
+        app:layout_constraintBottom_toBottomOf="parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:paddingLeft="30dp"
+        android:paddingRight="30dp"
+        android:background="@color/black">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="URL"
+            android:gravity="center"/>
+
+        <EditText
+            android:id="@+id/url_edit"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="URL"
+            android:gravity="center"
+            android:text="https://www."
+            android:autofillHints="notApplicable"
+            android:importantForAutofill="no"
+            android:singleLine="true"
+            android:scrollHorizontally="true"
+            android:layout_marginBottom="20dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Username"
+            android:gravity="center"/>
+
+        <EditText
+            android:id="@+id/login_edit"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Login"
+            android:autofillHints="username"
+            android:gravity="center"
+            android:layout_marginBottom="20dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Password"
+            android:gravity="center"/>
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp">
+
+            <EditText
+                android:id="@+id/passwsord_edit"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Password"
+                android:autofillHints="password"
+                android:gravity="center"
+                android:inputType="textPassword"/>
+
+            <ImageButton
+                android:id="@+id/password_visible_button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/visibility_drawable"
+                android:layout_gravity="center_vertical|right"
+                android:layout_marginRight="10dp"/>
+
+        </FrameLayout>
+
+
+        <CheckBox
+            android:id="@+id/remember_checkbox"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="Login automatically"
+            android:textColor="@color/white"
+            android:layout_marginBottom="20dp"/>
+
+        <Button
+            android:id="@+id/login_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Login"/>
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

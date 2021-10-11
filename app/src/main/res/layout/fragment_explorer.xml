@@ -1,56 +1,203 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    tools:context=".ExplorerFragment"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    tools:context=".ExplorerFragment">
+    android:layout_height="match_parent">
+
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:background="@color/black">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginBottom="10dp">
-
-            <LinearLayout
-                android:id="@+id/album_path_layout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginBottom="10dp">
-
-            </LinearLayout>
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/categories_grid_view"
-                android:layout_width="match_parent"
-                android:layout_height="150dp"
-                android:background="@color/black"
-                android:padding="1dp" />
-
-        </LinearLayout>
+        android:orientation="vertical">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <GridView
-                android:id="@+id/pictures_grid_view"
+            <LinearLayout
+                android:id="@+id/album_layout"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:footerDividersEnabled="false"
-                android:padding="1dp"
-                android:numColumns="3"
-                android:background="@color/black"/>
+                android:layout_height="0dp"
+                android:orientation="vertical"
+                android:layout_weight="1"
+                android:layout_margin="10dp">
+
+                <LinearLayout
+                    android:id="@+id/album_title_layout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/album_name"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:text="Album path"
+                        android:textSize="30sp"
+                        android:layout_weight="1"/>
+
+                    <ImageButton
+                    android:id="@+id/album_edit_button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:background="@drawable/edit"/>
+
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/album_title_edit_layout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <EditText
+                        android:id="@+id/album_name_edit"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:text="Album path"
+                        android:textSize="30sp"
+                        android:layout_weight="1"/>
+
+
+                    <ImageButton
+                        android:id="@+id/album_edit_confirm_button"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:backgroundTint="@color/white"
+                        android:background="@drawable/check"
+                        android:layout_marginLeft="10dp"/>
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/album_path_layout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Album path"
+                        android:textSize="10sp"/>
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+
+
+            <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+                android:id="@+id/swipeContainer"
+                android:layout_width="wrap_content"
+                android:layout_height="150dp"
+                app:layout_constraintTop_toBottomOf="@id/album_layout">
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/categories_grid_view"
+                    android:layout_width="match_parent"
+                    android:layout_height="150dp"
+                    android:background="@color/black"
+                    android:padding="1dp"
+                    app:layout_constraintTop_toBottomOf="@id/album_layout"/>
+
+            </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
         </LinearLayout>
 
+        <androidx.fragment.app.FragmentContainerView
+            android:id="@+id/image_list_fragment"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"/>
+
     </LinearLayout>
 
-</FrameLayout>
+    <LinearLayout
+        android:id="@+id/progress_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:layout_constraintBottom_toBottomOf="parent"
+        android:orientation="vertical"
+        android:visibility="invisible"
+        android:elevation="10dp">
+
+        <TextView
+            android:id="@+id/progress_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Uploading images..."
+            android:textColor="@color/white"/>
+
+        <ProgressBar
+            android:id="@+id/progress_bar"
+            style="@android:style/Widget.ProgressBar.Horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:progress="100"/>
+
+    </LinearLayout>
+
+    <androidx.coordinatorlayout.widget.CoordinatorLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="bottom"
+        android:background="@color/transparent">
+
+        <LinearLayout
+            android:id="@+id/cat_select_bottom_sheet"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:background="@color/gray"
+            android:columnCount="2"
+            android:alignmentMode="alignBounds"
+            app:behavior_hideable="true"
+            app:behavior_skipCollapsed="true"
+            app:behavior_peekHeight="0dp"
+            app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/select_cat_back"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Back"/>
+
+
+                <Button
+                    android:id="@+id/select_cat_ok"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="OK"/>
+
+            </LinearLayout>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/select_categories_list_view"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@color/black"
+                android:padding="1dp"
+                android:overScrollMode="never"
+                android:scrollbars="none"/>
+
+        </LinearLayout>
+
+    </androidx.coordinatorlayout.widget.CoordinatorLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

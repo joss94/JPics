@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:padding="10dp">
+
+
+    <EditText
+        android:id="@+id/album_name_edit"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Album Name"
+        app:layout_constraintTop_toTopOf="parent"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        app:layout_constraintTop_toBottomOf="@id/album_name_edit"
+        android:layout_marginTop="10dp">
+
+        <Button
+            android:id="@+id/album_edit_cancel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="Cancel"
+            android:layout_weight="1"
+            android:layout_marginRight="5dp"
+            android:gravity="center"/>
+
+
+        <Button
+            android:id="@+id/album_edit_confirm"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="Confirm"
+            android:layout_weight="1"
+            android:layout_marginLeft="10dp"
+            android:gravity="center"/>
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
