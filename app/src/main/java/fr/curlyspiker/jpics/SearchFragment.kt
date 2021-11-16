@@ -32,8 +32,6 @@ class SearchFragment : Fragment() {
         transaction.replace(R.id.image_list_fragment, imagesListFragment)
         transaction.commitAllowingStateLoss()
 
-        keywordsEdit.doOnTextChanged { text, start, before, count ->
-            imagesListFragment.setFilter(text.toString())
-        }
+        keywordsEdit.doOnTextChanged { text, _, _, _ -> imagesListFragment.setFilter(text.toString()) }
     }
 }

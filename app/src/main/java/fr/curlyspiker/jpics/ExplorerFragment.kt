@@ -7,14 +7,12 @@ import android.os.Bundle
 import android.text.InputType
 import android.text.TextUtils
 import android.util.AttributeSet
-import android.util.Log
 import android.view.*
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.ContextCompat
-import androidx.core.content.ContextCompat.getSystemService
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -209,7 +207,7 @@ class ExplorerFragment (private var startCat: Category? = null) :
             albumTitleLayout.visibility = View.VISIBLE
             albumTitleEditLayout.visibility = View.GONE
             albumTitleEdit.clearFocus()
-            imm.hideSoftInputFromWindow(albumTitleEdit.windowToken, 0);
+            imm.hideSoftInputFromWindow(albumTitleEdit.windowToken, 0)
         }
     }
 
@@ -243,7 +241,7 @@ class ExplorerFragment (private var startCat: Category? = null) :
             val textView = TextView(mContext)
             textView.setTextColor(ContextCompat.getColor(mContext, R.color.white))
             textView.textSize = 15.0f
-            var txt = "${p.name}"
+            var txt = p.name
             if(!isLast) {
                 textView.ellipsize = TextUtils.TruncateAt.END
                 txt += " > "
@@ -276,12 +274,13 @@ class ExplorerFragment (private var startCat: Category? = null) :
         builder.setTitle("Create a new album")
 
         val input = EditText(requireContext())
-        input.setHint("Name of new album")
+        input.hint = "Name of new album"
         input.inputType = InputType.TYPE_CLASS_TEXT
+        input.setTextColor(requireContext().getColor(R.color.white))
         builder.setView(input)
 
         builder.setPositiveButton("OK") { dialog, _ ->
-            var name = input.text.toString()
+            val name = input.text.toString()
             PiwigoSession.addCategory(name, currentCategory.getParent()?.id) {
                 refreshCategories()
             }
@@ -323,42 +322,15 @@ class ExplorerFragment (private var startCat: Category? = null) :
         val bottomSheetDialog = BottomSheetDialog(requireContext())
         bottomSheetDialog.setContentView(R.layout.activity_login)
 
-        bottomSheetDialog.show();
+        bottomSheetDialog.show()
     }
 
     private fun selectCategory(excludeList : List<Category> = listOf(), callback: (cat: Category?) -> Unit) {
 
-        val builder = AlertDialog.Builder(requireContext(), R.style.AlertStyle)
-        builder.setTitle("Select an album")
-
-        val labels = mutableListOf<String>()
-        val catIDs = mutableListOf<Int>()
-        CategoriesManager.categories.forEach { c ->
-            if(!excludeList.contains(c)) {
-                labels.add(c.name)
-                catIDs.add(c.id)
-            }
-        }
-
-        builder.setSingleChoiceItems(labels.toTypedArray(), -1) { dialog: DialogInterface, i: Int ->
-                dialog.dismiss()
-                callback(CategoriesManager.fromID(catIDs[i]))
-            }
-
-        builder.setNeutralButton("Cancel") { _: DialogInterface, i: Int -> callback(null) }
-
-        builder.create().show()
-
-        /*
-        selectCategoriesOkButton.setOnClickListener {
-            callback(selectCategoryListAdapter?.currentCategory)
-            categorySelectBottomSheet.state = BottomSheetBehavior.STATE_HIDDEN
-        }
-        selectCategoriesBackButton.setOnClickListener {
-            selectCategoryListAdapter?.currentCategory = selectCategoryListAdapter?.currentCategory?.getParent() ?: CategoriesManager.fromID(0)!!
-        }
-        categorySelectBottomSheet.state = BottomSheetBehavior.STATE_HALF_EXPANDED
-         */
+        val dialog = CategoryPicker(requireContext())
+        dialog.setOnCategorySelectedCallback(callback)
+        dialog.excludeCategories(excludeList)
+        dialog.show()
     }
 
     override fun onImagesReady(catId: Int?) {}
@@ -375,7 +347,7 @@ class ExplorerFragment (private var startCat: Category? = null) :
         activity?.runOnUiThread {
             progressLayout.visibility = View.VISIBLE
             progressBar.progress = 0
-            progressTitle.text = "Processing categories (0%)"
+            progressTitle.text = getString(R.string.processing_categories).format(0)
         }
     }
 
@@ -390,7 +362,7 @@ class ExplorerFragment (private var startCat: Category? = null) :
         activity?.runOnUiThread {
             val progressInt = (progress * 100).toInt()
             progressBar.progress = progressInt
-            progressTitle.text = "Processing categories ($progressInt%)"
+            progressTitle.text = getString(R.string.processing_categories).format(progressInt)
         }
     }
 
@@ -414,9 +386,7 @@ class ExplorerFragment (private var startCat: Category? = null) :
         fun refresh() {
             categories.clear()
             fragment.currentCategory.getChildren().forEach { c -> categories.add(CategoryItem(c)) }
-            fragment.activity?.runOnUiThread {
-                notifyDataSetChanged()
-            }
+            updateOnUIThread()
         }
 
         fun getSelectedCategories() : List<Category> {
@@ -428,7 +398,13 @@ class ExplorerFragment (private var startCat: Category? = null) :
         fun exitSelectionMode() {
             selecting = false
             categories.forEach { c -> c.checked = false }
-            notifyDataSetChanged()
+            updateOnUIThread()
+        }
+
+        private fun updateOnUIThread() {
+            fragment.activity?.runOnUiThread {
+                notifyDataSetChanged()
+            }
         }
 
         private fun setItemChecked(index: Int, checked: Boolean) {
@@ -439,7 +415,7 @@ class ExplorerFragment (private var startCat: Category? = null) :
                     selectionListener?.onSelectionEnabled()
                 }
             }
-            notifyDataSetChanged()
+            updateOnUIThread()
             selectionListener?.onSelectionChanged()
         }
 
@@ -456,7 +432,7 @@ class ExplorerFragment (private var startCat: Category? = null) :
 
         override fun onBindViewHolder(vh: ViewHolder, position: Int) {
             if(position == categories.size) {
-                vh.title.text = "New album"
+                vh.title.text = fragment.requireContext().getString(R.string.new_album)
                 vh.elementsLabel.text = ""
                 vh.icon.setImageDrawable(AppCompatResources.getDrawable(fragment.requireContext(), R.drawable.add_big))
                 vh.icon.setOnClickListener { fragment.addCategory() }
@@ -504,7 +480,7 @@ class ExplorerFragment (private var startCat: Category? = null) :
         RecyclerView.Adapter<SelectCategoryListAdapter.ViewHolder>(){
 
         private var categories = mutableListOf<Category>()
-        var currentCategory = CategoriesManager.fromID(0)!!
+        private var currentCategory = CategoriesManager.fromID(0)!!
 
         fun refresh() {
             currentCategory = CategoriesManager.fromID(currentCategory.id) ?: CategoriesManager.fromID(0)!!

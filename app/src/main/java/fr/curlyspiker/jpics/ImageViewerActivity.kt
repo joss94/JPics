@@ -3,24 +3,22 @@ package fr.curlyspiker.jpics
 import android.Manifest
 import android.app.AlertDialog
 import android.content.Context
-import android.content.DialogInterface
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Environment
-import android.util.Log
+import android.text.InputType
 import android.view.*
-import android.widget.TextView
+import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.viewpager.widget.PagerAdapter
 import androidx.viewpager.widget.ViewPager
-import com.google.android.material.bottomsheet.BottomSheetBehavior
-import com.google.android.material.bottomsheet.BottomSheetBehavior.*
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.squareup.picasso.Picasso
 import java.text.SimpleDateFormat
+import java.util.*
 
 
 class ImageViewerActivity : AppCompatActivity() {
@@ -38,7 +36,7 @@ class ImageViewerActivity : AppCompatActivity() {
     private lateinit var infoTags : TextView
 
     private var catId: Int = -1
-
+    private var currentPicId : Int = -1
 
     private var onPermissionsGranted : () -> Unit = {}
     private val permissionReq = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted: Boolean ->
@@ -56,13 +54,14 @@ class ImageViewerActivity : AppCompatActivity() {
 
         pagerAdapter = ImageViewerPager(applicationContext)
         pager.adapter = pagerAdapter
-        pagerAdapter.pictures = CategoriesManager.currentlyDisplayedList?.toList() ?: listOf()
+        pagerAdapter.pictures = CategoriesManager.currentlyDisplayedList.toList()
 
         pager.addOnPageChangeListener(object: ViewPager.OnPageChangeListener {
             override fun onPageScrolled(position: Int, positionOffset: Float, positionOffsetPixels: Int) {}
             override fun onPageScrollStateChanged(state: Int) {}
             override fun onPageSelected(position: Int) {
-                updateBottomSheet(pagerAdapter.pictures[position])
+                currentPicId = pagerAdapter.pictures[position]
+                updateBottomSheet()
             }
         })
 
@@ -75,6 +74,52 @@ class ImageViewerActivity : AppCompatActivity() {
         infoSize = infoDialog.findViewById(R.id.size)!!
         infoAddedBy = infoDialog.findViewById(R.id.info_addedby)!!
         infoTags = infoDialog.findViewById(R.id.info_keywords)!!
+        infoDialog.findViewById<ImageButton>(R.id.pic_info_edit_name)?.setOnClickListener {
+            val builder: AlertDialog.Builder = AlertDialog.Builder(this, R.style.AlertStyle)
+            builder.setTitle("Change picture name")
+
+            val input = EditText(this)
+            input.hint = "New name of picture"
+            input.inputType = InputType.TYPE_CLASS_TEXT
+            input.setText(currentPic().name)
+            input.setTextColor(getColor(R.color.white))
+            builder.setView(input)
+
+            builder.setPositiveButton("OK") { dialog, _ ->
+                val name = input.text.toString()
+                PiwigoSession.setPictureInfo(currentPicId, name = name) {
+                    updateBottomSheet()
+                }
+                dialog.dismiss()
+            }
+
+            builder.setNegativeButton("Cancel") { dialog, _ -> dialog.cancel() }
+
+            builder.show()
+        }
+
+        infoDialog.findViewById<ImageButton>(R.id.pic_info_edit_date)?.setOnClickListener {
+            Utils.getDatetime(supportFragmentManager, currentPic().creationDate) {
+                PiwigoSession.setPictureInfo(currentPicId, creationDate = it) {
+                    updateBottomSheet()
+                }
+            }
+        }
+
+        infoDialog.findViewById<ImageButton>(R.id.pic_info_edit_keywords)?.setOnClickListener {
+            val dialog = TagEditor(this) { tags ->
+                val newTags = tags.filter { t -> t.id == -1 }
+                PiwigoSession.addTags(newTags) {
+                    tags.forEach { t -> t.id = PiwigoSession.getTagFromString(t.name)?.id ?: t.id }
+                    PiwigoSession.setPictureInfo(currentPicId, tags = tags) {
+                        updateBottomSheet()
+                    }
+                }
+            }
+
+            dialog.setTags(currentPic().getTags())
+            dialog.show()
+        }
 
         startActionMode(object : ActionMode.Callback{
             override fun onCreateActionMode(mode: ActionMode?,menu: Menu?): Boolean {
@@ -102,43 +147,50 @@ class ImageViewerActivity : AppCompatActivity() {
             }
         })
 
+        currentPicId = pagerAdapter.pictures[index]
         pager.currentItem = index
-        updateBottomSheet(pagerAdapter.pictures[index])
+        updateBottomSheet()
     }
 
-    private fun updateBottomSheet(pic: Picture) {
-        PiwigoSession.getPictureInfo(pic.id) { rsp ->
-            pic.infos = rsp
+    private fun currentPic() : Picture {
+        return CategoriesManager.pictures.getValue(currentPicId)
+    }
 
-            infoFilename.text = pic.name
+    private fun updateBottomSheet() {
+        CategoriesManager.pictures[currentPicId]?.getInfo(true) { info ->
+            runOnUiThread {
+                val name = info.optString("name", "null")
+                infoFilename.text = if(name == "null") info.optString("file", "Unknown") else name
 
-            val format = SimpleDateFormat("EEE dd MMMM YYYY HH:MM")
-            infoCreationDate.text = format.format(pic.creationDate)
+                val creationString = info.optString("date_creation", "")
+                try {
+                    val creationDate = SimpleDateFormat("yyyy-MM-dd HH:mm:ss").parse(creationString) ?: Date()
+                    val format = SimpleDateFormat("EEE dd MMMM yyyy HH:mm:ss", Locale.US)
+                    infoCreationDate.text = format.format(creationDate)
+                } catch (e: java.lang.Exception) {}
 
-            var albumsTxt = ""
-            pic.getCategories().forEach { c -> albumsTxt += "${c.name} - " }
-            infoAlbums.text = albumsTxt
 
-            infoSize.text = "${pic.infos.optString("width")} x ${pic.infos.optString("height")}"
 
-            infoAddedBy.text = PiwigoSession.getUser(pic.infos.optString("added_by", "-1").toInt())?.username
+                var albumsTxt = ""
+                currentPic().getCategories().forEach { c -> albumsTxt += "${c.name} - " }
+                infoAlbums.text = if(albumsTxt.isEmpty()) "None" else albumsTxt.subSequence(0, albumsTxt.length - 3)
 
-            val tags = pic.infos.optJSONArray("tags")
-            tags?.let {
+                infoSize.text = getString(R.string.size_info).format(info.optString("width", "0").toInt(), info.optString("height", "0").toInt())
+
+                infoAddedBy.text = PiwigoSession.getUser(info.optString("added_by", "-1").toInt())?.username
+
+                val tags = currentPic().getTags()
                 var tagsTxt = ""
-                for(i in 0 until tags.length()) {
-                    val tagObj = tags.getJSONObject(i)
-                    val tagId = tagObj.getString("id").toInt()
-                    Log.d("TAG", "Tag id: $tagId    tag name: ${PiwigoSession.getTag(tagId)?.name}")
-                    tagsTxt += PiwigoSession.getTag(tagId)?.name + " - "
+                tags.forEach { t ->
+                    tagsTxt += t.name + " - "
                 }
-                infoTags.text = tagsTxt
+                infoTags.text = if(tagsTxt.isEmpty()) "None" else tagsTxt.subSequence(0, tagsTxt.length - 3)
             }
         }
     }
 
     private fun downloadImage() {
-        val picture = pagerAdapter.pictures[pager.currentItem]
+        val picture = CategoriesManager.pictures.getValue(pagerAdapter.pictures[pager.currentItem])
         fun downloadImagesPermissionGranted() {
             val path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).path + "/JPics"
             picture.saveToLocal(this, path)
@@ -155,17 +207,30 @@ class ImageViewerActivity : AppCompatActivity() {
 
     private fun moveImage() {
         val picture = pagerAdapter.pictures[pager.currentItem]
-        selectCategory { c ->
-            c?.let {
-                PiwigoSession.movePictures(listOf(picture), it) {
-                    CategoriesManager.refreshAllPictures {
-                        runOnUiThread {
-                            pagerAdapter.pictures = CategoriesManager.currentlyDisplayedList?.toList() ?: listOf()
+
+        val builder = AlertDialog.Builder(this, R.style.AlertStyle)
+        builder.setTitle("What do you want to do ?")
+        var checkedItem = 0
+        val labels = arrayOf("Add to other album", "Move to different location")
+        builder.setSingleChoiceItems(labels, checkedItem) { _, i -> checkedItem = i }
+        builder.setCancelable(true)
+
+        builder.setPositiveButton("OK") { _, _ ->
+            selectCategory { c ->
+                c?.let {
+                    PiwigoSession.movePictures(listOf(picture), checkedItem == 0, it) {
+                        CategoriesManager.refreshAllPictures {
+                            runOnUiThread {
+                                pagerAdapter.pictures = CategoriesManager.currentlyDisplayedList?.toList() ?: listOf()
+                            }
+                            updateBottomSheet()
                         }
                     }
                 }
             }
         }
+
+        builder.create().show()
     }
 
     private fun deleteImage() {
@@ -174,9 +239,7 @@ class ImageViewerActivity : AppCompatActivity() {
             .setTitle("Delete image")
             .setMessage("Are you sure you want to delete this image?")
             .setIcon(android.R.drawable.ic_dialog_alert)
-            .setPositiveButton("Yes") { dialog, whichButton ->
-                PiwigoSession.deletePictures(listOf(picture))
-            }
+            .setPositiveButton("Yes") { _, _ -> PiwigoSession.deletePictures(listOf(picture)) }
             .setNegativeButton("Cancel", null).show()
     }
 
@@ -184,28 +247,10 @@ class ImageViewerActivity : AppCompatActivity() {
         infoDialog.show()
     }
 
-    private fun selectCategory(callback: (cat: Category?) -> Unit) {
-        val builder = AlertDialog.Builder(this, R.style.AlertStyle)
-        builder.setTitle("Select an album")
-
-        val labels = mutableListOf<String>()
-        val catIDs = mutableListOf<Int>()
-        CategoriesManager.categories.forEach { c ->
-            labels.add(c.name)
-            catIDs.add(c.id)
-        }
-
-        builder.setSingleChoiceItems(labels.toTypedArray(), -1) { dialog: DialogInterface, i: Int ->
-            dialog.dismiss()
-            callback(CategoriesManager.fromID(catIDs[i]))
-        }
-
-        builder.setNeutralButton("Cancel") { dialog: DialogInterface, i: Int ->
-            dialog.cancel()
-            callback(null)
-        }
-
-        builder.create().show()
+    private fun selectCategory(callback: (cat: Category) -> Unit) {
+        val dialog = CategoryPicker(this)
+        dialog.setOnCategorySelectedCallback(callback)
+        dialog.show()
     }
 
     override fun onSaveInstanceState (outState: Bundle) {
@@ -215,8 +260,8 @@ class ImageViewerActivity : AppCompatActivity() {
 
     class ImageViewerPager (private val mContext: Context) : PagerAdapter() {
 
-        var imageView: ZoomableImageView? = null
-        var pictures: List<Picture> = listOf()
+        private var imageView: ZoomableImageView? = null
+        var pictures: List<Int> = listOf()
             set(value) {
                 field = value
                 notifyDataSetChanged()
@@ -238,9 +283,10 @@ class ImageViewerActivity : AppCompatActivity() {
             imageView = itemView.findViewById(R.id.image_view)
 
             if(position < pictures.size) {
-                val picture = pictures[position]
+                val id = pictures[position]
 
-                val imgUrl = picture.fullResUrl
+                val pic = CategoriesManager.pictures.getValue(id)
+                val imgUrl = pic.fullResUrl
                 if(imgUrl.isNotEmpty()) {
                     Picasso.with(mContext).load(imgUrl).into(imageView)
                 }

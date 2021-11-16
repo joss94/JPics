@@ -10,8 +10,6 @@ import android.view.MotionEvent
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import com.android.volley.toolbox.Volley
-import java.lang.Exception
 
 
 class LoginActivity : AppCompatActivity() {
@@ -40,8 +38,8 @@ class LoginActivity : AppCompatActivity() {
         }
 
         passwordVisibleButton = findViewById(R.id.password_visible_button)
-        passwordVisibleButton.setOnTouchListener { view, event ->
-            when (event.getAction()) {
+        passwordVisibleButton.setOnTouchListener { _, event ->
+            when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     passwordEdit.transformationMethod = null
                 }
@@ -56,26 +54,16 @@ class LoginActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("fr.curlyspiker.jpics", Context.MODE_PRIVATE)
 
         val url = prefs.getString("server_url", null)
-        Log.d("TAG", "URL: $url")
         if(url != null) {
             urlEdit.setText(url)
         }
+        PiwigoServerHelper.serverUrl = url?:""
 
         val autoLogin = prefs.getBoolean("auto_login", false)
         autoCheckBox.isChecked = autoLogin
-
-        if(autoLogin) {
-            val username = prefs.getString("username", null)
-            val password = prefs.getString("password", null)
-            if(url != null  && username != null && password != null) {
-                doLogin(url, username, password)
-            }
-        }
     }
 
     private fun doLogin(url: String, username: String, password: String) {
-
-
         Log.d("TAG", "Doing login with url: $url")
 
         PiwigoServerHelper.serverUrl = url
@@ -88,16 +76,19 @@ class LoginActivity : AppCompatActivity() {
                 prefs.edit().putString("username", username).apply()
                 prefs.edit().putString("password", password).apply()
 
-                val intent = Intent(this, MainActivity::class.java)
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                ContextCompat.startActivity(this, intent, null)
+                proceedToApp()
             }
             else {
                 try {
-
                     Toast.makeText(this, "Login failed, please check URL and login credentials", Toast.LENGTH_LONG).show()
                 } catch(e: Exception) {}
             }
         }
+    }
+
+    private fun proceedToApp() {
+        val intent = Intent(this, MainActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        ContextCompat.startActivity(this, intent, null)
     }
 }

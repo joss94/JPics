@@ -23,34 +23,72 @@
             android:layout_columnWeight="0.5"
             android:text="Creation date"/>
 
-        <TextView
-            style="@style/infoBottomSheetStyle"
-            android:id="@+id/image_creation_date"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_column="1"
             android:layout_row="0"
             android:layout_columnWeight="1"
-            android:text=""/>
+            android:orientation="horizontal">
+
+            <TextView
+                style="@style/infoBottomSheetStyle"
+                android:id="@+id/image_creation_date"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text=""/>
+
+            <ImageButton
+                android:id="@+id/pic_info_edit_date"
+                style="@style/infoBottomSheetStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:src="@drawable/edit"
+                android:scaleX="0.7"
+                android:scaleY="0.7"
+                android:text="File name"/>
+
+        </LinearLayout>
+
 
         <TextView
-            android:layout_width="0dp"
-            style="@style/infoBottomSheetStyle"
-            android:layout_height="wrap_content"
+            android:layout_columnWeight="0.5"
             android:layout_column="0"
             android:layout_row="1"
-            android:layout_columnWeight="0.5"
+            style="@style/infoBottomSheetStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
             android:text="File name"/>
 
-        <TextView
-            android:id="@+id/image_name"
-            style="@style/infoBottomSheetStyle"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_column="1"
             android:layout_row="1"
             android:layout_columnWeight="1"
-            android:text=""/>
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/image_name"
+                style="@style/infoBottomSheetStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text=""/>
+
+            <ImageButton
+                android:id="@+id/pic_info_edit_name"
+                style="@style/infoBottomSheetStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:src="@drawable/edit"
+                android:scaleX="0.7"
+                android:scaleY="0.7"
+                android:text="File name"/>
+
+        </LinearLayout>
+
 
         <TextView
             android:layout_width="0dp"
@@ -118,15 +156,34 @@
             android:layout_columnWeight="0.5"
             android:text="Keywords"/>
 
-        <TextView
-            android:id="@+id/info_keywords"
-            style="@style/infoBottomSheetStyle"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_column="1"
             android:layout_row="5"
             android:layout_columnWeight="1"
-            android:text=""/>
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/info_keywords"
+                style="@style/infoBottomSheetStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text=""/>
+
+            <ImageButton
+                android:id="@+id/pic_info_edit_keywords"
+                style="@style/infoBottomSheetStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:src="@drawable/edit"
+                android:scaleX="0.7"
+                android:scaleY="0.7"
+                android:text="File name"/>
+
+        </LinearLayout>
+
 
 
     </GridLayout>

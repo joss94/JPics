@@ -1,5 +1,41 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="DesignSurface">
+    <option name="filePathToZoomLevelMap">
+      <map>
+        <entry key="../../../../../../layout/custom_preview.xml" value="0.41822916666666665" />
+        <entry key="app/src/main/res/drawable/add_big.xml" value="0.215625" />
+        <entry key="app/src/main/res/drawable/add_button.xml" value="0.215625" />
+        <entry key="app/src/main/res/drawable/cloud_off.xml" value="0.3260416666666667" />
+        <entry key="app/src/main/res/drawable/cloud_on.xml" value="0.3260416666666667" />
+        <entry key="app/src/main/res/drawable/refresh.xml" value="0.215625" />
+        <entry key="app/src/main/res/drawable/refresh_big.xml" value="0.215625" />
+        <entry key="app/src/main/res/drawable/refresh_button.xml" value="0.215625" />
+        <entry key="app/src/main/res/drawable/tag_rounded_background.xml" value="0.559375" />
+        <entry key="app/src/main/res/layout/activity_account.xml" value="0.19375" />
+        <entry key="app/src/main/res/layout/activity_base.xml" value="0.16614583333333333" />
+        <entry key="app/src/main/res/layout/activity_image_viewer.xml" value="0.19429347826086957" />
+        <entry key="app/src/main/res/layout/activity_login.xml" value="0.19895833333333332" />
+        <entry key="app/src/main/res/layout/activity_sync.xml" value="0.22" />
+        <entry key="app/src/main/res/layout/category_row.xml" value="0.2641843971631206" />
+        <entry key="app/src/main/res/layout/category_tile.xml" value="0.2641843971631206" />
+        <entry key="app/src/main/res/layout/date_time_picker.xml" value="0.22447916666666667" />
+        <entry key="app/src/main/res/layout/dialog_category_edit.xml" value="0.30344202898550726" />
+        <entry key="app/src/main/res/layout/dialog_category_picker.xml" value="0.33" />
+        <entry key="app/src/main/res/layout/dialog_image_info.xml" value="0.28894927536231885" />
+        <entry key="app/src/main/res/layout/dialog_tag_picker.xml" value="0.2796875" />
+        <entry key="app/src/main/res/layout/fragment_explorer.xml" value="0.2641843971631206" />
+        <entry key="app/src/main/res/layout/fragment_image_list.xml" value="0.28894927536231885" />
+        <entry key="app/src/main/res/layout/image_tile.xml" value="0.2916666666666667" />
+        <entry key="app/src/main/res/layout/image_viewer_page.xml" value="0.19429347826086957" />
+        <entry key="app/src/main/res/layout/syncFolderRow.xml" value="0.5432291666666667" />
+        <entry key="app/src/main/res/layout/sync_folder_row.xml" value="0.19375" />
+        <entry key="app/src/main/res/layout/tagTile.xml" value="0.2796875" />
+        <entry key="app/src/main/res/layout/tag_tile.xml" value="0.3020833333333333" />
+        <entry key="app/src/main/res/menu/explorer_menu.xml" value="0.5432291666666667" />
+      </map>
+    </option>
+  </component>
   <component name="ProjectPlainTextFileTypeManager">
     <file url="file://$PROJECT_DIR$/app/src/main/res/drawable/logo.xml" />
   </component>

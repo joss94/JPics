@@ -10,53 +10,64 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        app:layout_constraintBottom_toBottomOf="parent">
+        android:orientation="vertical">
 
-        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-            android:id="@+id/swipeContainer"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content">
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
 
-            <FrameLayout
+            <ImageView
+                android:id="@+id/no_image_view"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent">
+                android:layout_height="match_parent"
+                android:src="@drawable/no_image"
+                android:scaleType="fitCenter"
+                android:padding="150dp"
+                android:visibility="visible"
+                app:tint="@color/dark_gray" />
 
-                <ImageView
-                    android:id="@+id/no_image_view"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:src="@drawable/no_image"
-                    android:scaleType="fitCenter"
-                    android:padding="150dp"
-                    android:visibility="visible"
-                    app:tint="@color/dark_gray" />
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/pictures_grid_view"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:footerDividersEnabled="false"
+                android:padding="0dp"
+                android:numColumns="3"
+                android:background="@color/transparent"/>
 
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/pictures_grid_view"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:footerDividersEnabled="false"
-                    android:padding="0dp"
-                    android:numColumns="3"
-                    android:background="@color/transparent"/>
-
-            </FrameLayout>
-
-        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+        </FrameLayout>
 
     </LinearLayout>
+
 
     <ImageButton
         android:id="@+id/add_image_button"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:elevation="10dp"
-        android:background="@drawable/add_button"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintRight_toRightOf="parent"
+        android:elevation="10dp"
+        android:background="@drawable/add_button"
         android:contentDescription=""
-        android:layout_margin="40dp"/>
+        android:layout_marginEnd="20dp"
+        android:layout_marginBottom="20dp"
+        android:scaleX="0.7"
+        android:scaleY="0.7"/>
+
+    <ImageButton
+        android:id="@+id/refresh_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:layout_constraintBottom_toTopOf="@id/add_image_button"
+        app:layout_constraintRight_toRightOf="parent"
+        android:elevation="10dp"
+        android:background="@drawable/refresh_button"
+        android:contentDescription=""
+        android:layout_marginEnd="20dp"
+        android:scaleX="0.7"
+        android:scaleY="0.7"/>
+
+
 
     <LinearLayout
         android:id="@+id/progress_layout"

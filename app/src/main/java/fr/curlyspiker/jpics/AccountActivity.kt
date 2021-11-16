@@ -25,6 +25,11 @@ class AccountActivity : AppCompatActivity() {
         logoutButton.setOnClickListener {
             logout()
         }
+
+        findViewById<TextView>(R.id.sync_button).setOnClickListener {
+            val intent = Intent(this, SyncActivity::class.java)
+            ContextCompat.startActivity(this, intent, null)
+        }
     }
 
     private fun logout() {

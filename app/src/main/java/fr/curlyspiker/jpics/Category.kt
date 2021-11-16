@@ -1,10 +1,7 @@
 package fr.curlyspiker.jpics
 
 import android.util.Log
-import kotlinx.coroutines.*
 import org.json.JSONObject
-import java.util.concurrent.Semaphore
-import kotlin.coroutines.suspendCoroutine
 
 interface CategoriesManagerListener {
     fun onImagesReady(catId: Int?)
@@ -17,7 +14,7 @@ object CategoriesManager {
     var categories = mutableListOf<Category>()
     private var listeners: MutableList<CategoriesManagerListener?> = mutableListOf()
 
-    var currentlyDisplayedList: MutableList<Picture>? = mutableListOf()
+    var currentlyDisplayedList: MutableList<Int> = mutableListOf()
 
     init{ categories.add(Category(0, "Home")) }
 
@@ -35,22 +32,19 @@ object CategoriesManager {
 
     fun refreshAllPictures(callback: () -> Unit = {}) {
 
-        Log.d("TAG", "Refreshed all pictures, cats size: ${categories.size}")
-        categories.forEach { c ->
-            PiwigoSession.getPictures(listOf(c)) { success, pics ->
-                val cat = fromID(c.id)
-                cat?.let {
-                    cat.picturesIDs.clear()
-                    pics.forEach { p ->
-                        pictures[p.id] = p
-                        cat.picturesIDs.add(p.id)
-                    }
-                }
+        fun refreshNext(index: Int) {
+            if(index >= categories.size) {
+                listeners.forEach { l -> l?.onImagesReady(null) }
+                callback()
+                Log.d("TAG", "Refreshed all pictures, received ${pictures.size} items")
+                return
+            }
+
+            refreshPictures(categories[index].id) {
+                refreshNext(index + 1)
             }
         }
-        listeners.forEach { l -> l?.onImagesReady(null) }
-        callback()
-        Log.d("TAG", "Refreshed all pictures, received ${pictures.size} items")
+        refreshNext(0)
     }
 
     fun refreshPictures(catId: Int?, callback: () -> Unit = {}) {
@@ -58,7 +52,7 @@ object CategoriesManager {
         if(c == null) {
             refreshAllPictures(callback)
         } else {
-            PiwigoSession.getPictures(listOf(c)) { success, pics ->
+            PiwigoSession.getPictures(listOf(c)) { _, pics ->
                 c.picturesIDs.clear()
                 pics.forEach { p ->
                     pictures[p.id] = p
@@ -71,9 +65,9 @@ object CategoriesManager {
         }
     }
 
-    fun getPictures(catId: Int? = null) : List<Picture>  {
+    fun getPictures(catId: Int? = null) : List<Int>  {
         return if(catId == null) {
-            pictures.values.toMutableList()
+            pictures.keys.toMutableList()
         } else {
             val cat = fromID(catId)
             Log.d("TAG", "True cat ${cat?.name} has ${cat?.picturesIDs?.size} pictures")
@@ -82,7 +76,7 @@ object CategoriesManager {
     }
 
     fun refreshCategories(callback: () -> Unit) {
-        PiwigoSession.getCategories { success, cats ->
+        PiwigoSession.getCategories { _, cats ->
             val newCats = cats.toMutableList()
             newCats.add(fromID(0)!!)
 
@@ -94,17 +88,27 @@ object CategoriesManager {
             }
 
             categories = newCats
-            listeners.forEach { l -> l?.onCategoriesReady() }
-            callback()
+
+            if(getInstantUploadCat() == null) {
+                PiwigoSession.addCategory("InstantUpload", 0) {
+                    refreshCategories(callback)
+                }
+            } else {
+                listeners.forEach { l -> l?.onCategoriesReady() }
+                callback()
+            }
         }
+    }
+
+    fun getInstantUploadCat() : Category? {
+        return categories.firstOrNull { c -> c.name == "InstantUpload" }
     }
 }
 
 class Category (
     val id: Int,
     val name: String,
-    val parentId: Int = -1,
-    val nPictures: Int = 0
+    private val parentId: Int = -1
     ) {
 
     var thumbnailId: Int = -1
@@ -124,9 +128,7 @@ class Category (
                 parentId = ranks[ranks.size - 2].toInt()
             }
 
-            val nPictures = json.optInt("nb_images", 0)
-
-            val c = Category(id, name, parentId, nPictures)
+            val c = Category(id, name, parentId)
             c.thumbnailId = json.optString("representative_picture_id").toIntOrNull()?:-1
             c.thumbnailUrl = json.optString("tn_url")
 
@@ -136,8 +138,8 @@ class Category (
 
     fun getThumbnailUrl() : String {
         if (thumbnailUrl.isEmpty()) {
-            val validPic = getPictures(true).firstOrNull { p -> p.thumbnailUrl.isNotEmpty() }
-            validPic?.let { thumbnailUrl = it.thumbnailUrl }
+            val validPic = getPictures(true).firstOrNull { id -> CategoriesManager.pictures.getValue(id).thumbnailUrl.isNotEmpty() }
+            validPic?.let { thumbnailUrl = CategoriesManager.pictures.getValue(id).thumbnailUrl }
         }
         return thumbnailUrl
     }
@@ -150,10 +152,9 @@ class Category (
         return CategoriesManager.categories.firstOrNull { c -> c.id == parentId }
     }
 
-    fun getPictures(recursive: Boolean = false) : List<Picture>  {
+    fun getPictures(recursive: Boolean = false) : List<Int>  {
 
-        Log.d("TAG", "Cat $name has ${picturesIDs.size} pictures")
-        val out = CategoriesManager.pictures.values.filter { p -> picturesIDs.contains(p.id) }.toMutableList()
+        val out = picturesIDs.toMutableList()
         if(recursive) {
             getChildren().forEach { c -> out.addAll(c.getPictures(true)) }
         }

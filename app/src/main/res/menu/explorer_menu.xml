@@ -15,6 +15,11 @@
         android:icon="@drawable/download"
         app:showAsAction="always" />
 
+    <item android:id="@+id/action_select_all"
+        android:title="Select all"
+        android:icon="@drawable/image_icon"
+        app:showAsAction="never" />
+
     <item android:id="@+id/action_move"
         android:title="Move"
         android:icon="@drawable/folder"
@@ -28,6 +33,11 @@
     <item android:id="@+id/action_delete"
         android:title="Delete"
         android:icon="@drawable/delete"
+        app:showAsAction="never" />
+
+    <item android:id="@+id/action_creation_date"
+        android:title="Set creation date"
+        android:icon="@drawable/calendar_edit"
         app:showAsAction="never" />
 
 </menu>

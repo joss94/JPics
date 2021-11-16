@@ -2,8 +2,6 @@ package fr.curlyspiker.jpics
 
 import android.content.Context
 import android.graphics.*
-import android.graphics.drawable.Drawable
-import android.text.TextPaint
 import android.util.AttributeSet
 import android.view.GestureDetector
 import android.view.MotionEvent
@@ -11,7 +9,6 @@ import android.view.ScaleGestureDetector
 import android.view.View
 import androidx.annotation.Nullable
 import androidx.appcompat.widget.AppCompatImageView
-
 
 class ZoomableImageView : AppCompatImageView, View.OnTouchListener,
 GestureDetector.OnGestureListener, GestureDetector.OnDoubleTapListener {
@@ -76,13 +73,10 @@ GestureDetector.OnGestureListener, GestureDetector.OnDoubleTapListener {
                 mSaveScale = mMinScale
                 mScaleFactor = mMinScale / prevScale
             }
-            if (origWidth * mSaveScale <= viewWidth
-                || origHeight * mSaveScale <= viewHeight) {
-                mMatrix!!.postScale(mScaleFactor, mScaleFactor, viewWidth / 2.toFloat(),
-                    viewHeight / 2.toFloat())
+            if (origWidth * mSaveScale <= viewWidth || origHeight * mSaveScale <= viewHeight) {
+                mMatrix!!.postScale(mScaleFactor, mScaleFactor, viewWidth / 2.toFloat(), viewHeight / 2.toFloat())
             } else {
-                mMatrix!!.postScale(mScaleFactor, mScaleFactor,
-                    detector.focusX, detector.focusY)
+                mMatrix!!.postScale(mScaleFactor, mScaleFactor, detector.focusX, detector.focusY)
             }
             fixTranslation()
             return true
@@ -91,23 +85,19 @@ GestureDetector.OnGestureListener, GestureDetector.OnDoubleTapListener {
 
     private  fun fitToScreen() {
         mSaveScale = 1f
-        val scale: Float
         val drawable = drawable
         if (drawable == null || drawable.intrinsicWidth == 0 || drawable.intrinsicHeight == 0) return
-        val imageWidth = drawable.intrinsicWidth
-        val imageHeight = drawable.intrinsicHeight
-        val scaleX = viewWidth.toFloat() / imageWidth.toFloat()
-        val scaleY = viewHeight.toFloat() / imageHeight.toFloat()
-        scale = scaleX.coerceAtMost(scaleY)
+        val imageWidth = drawable.intrinsicWidth.toFloat()
+        val imageHeight = drawable.intrinsicHeight.toFloat()
+        val scaleX = viewWidth.toFloat() / imageWidth
+        val scaleY = viewHeight.toFloat() / imageHeight
+        val scale = scaleX.coerceAtMost(scaleY)
         mMatrix!!.setScale(scale, scale)
 
         // Center the image
-        var redundantYSpace = (viewHeight.toFloat()
-                - scale * imageHeight.toFloat())
-        var redundantXSpace = (viewWidth.toFloat()
-                - scale * imageWidth.toFloat())
-        redundantYSpace /= 2.toFloat()
-        redundantXSpace /= 2.toFloat()
+        val redundantYSpace = (viewHeight.toFloat() - scale * imageHeight) / 2f
+        val redundantXSpace = (viewWidth.toFloat() - scale * imageWidth) / 2f
+
         mMatrix!!.postTranslate(redundantXSpace, redundantYSpace)
         origWidth = viewWidth - 2 * redundantXSpace
         origHeight = viewHeight - 2 * redundantYSpace
@@ -124,28 +114,22 @@ GestureDetector.OnGestureListener, GestureDetector.OnDoubleTapListener {
     }
 
     private fun getFixTranslation(trans: Float, viewSize: Float, contentSize: Float): Float {
-        val minTrans: Float
-        val maxTrans: Float
-        if (contentSize <= viewSize) { // case: NOT ZOOMED
-            minTrans = 0f
+        var minTrans = 0f
+        var maxTrans = 0f
+        if (contentSize <= viewSize) {
             maxTrans = viewSize - contentSize
-        } else { //CASE: ZOOMED
+        } else {
             minTrans = viewSize - contentSize
-            maxTrans = 0f
         }
-        if (trans < minTrans) { // negative x or y translation (down or to the right)
-            return -trans + minTrans
+        return when {
+            trans < minTrans -> return -trans + minTrans
+            trans > maxTrans -> return -trans + maxTrans
+            else -> 0F
         }
-        if (trans > maxTrans) { // positive x or y translation (up or to the left)
-            return -trans + maxTrans
-        }
-        return 0F
     }
 
     private fun getFixDragTrans(delta: Float, viewSize: Float, contentSize: Float): Float {
-        return if (contentSize <= viewSize) {
-            0F
-        } else delta
+        return if (contentSize <= viewSize) 0F else delta
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -153,15 +137,10 @@ GestureDetector.OnGestureListener, GestureDetector.OnDoubleTapListener {
         viewWidth = MeasureSpec.getSize(widthMeasureSpec)
         viewHeight = MeasureSpec.getSize(heightMeasureSpec)
         if (mSaveScale == 1f) {
-
-            // Fit to screen.
             fitToScreen()
         }
     }
 
-    /*
-        Ontouch
-     */
     override fun onTouch(view: View?, event: MotionEvent): Boolean {
         mScaleDetector!!.onTouchEvent(event)
         mGestureDetector!!.onTouchEvent(event)
@@ -187,49 +166,23 @@ GestureDetector.OnGestureListener, GestureDetector.OnDoubleTapListener {
         return false
     }
 
-    /*
-        GestureListener
-     */
-    override fun onDown(motionEvent: MotionEvent): Boolean {
-        return false
-    }
-
-    override fun onShowPress(motionEvent: MotionEvent) {}
-    override fun onSingleTapUp(motionEvent: MotionEvent): Boolean {
-        return false
-    }
-
-    override fun onScroll(motionEvent: MotionEvent, motionEvent1: MotionEvent, v: Float, v1: Float): Boolean {
-        return false
-    }
-
-    override fun onLongPress(motionEvent: MotionEvent) {}
-    override fun onFling(motionEvent: MotionEvent, motionEvent1: MotionEvent, v: Float, v1: Float): Boolean {
-        return false
-    }
-
-    /*
-        onDoubleTap
-     */
-    override fun onSingleTapConfirmed(motionEvent: MotionEvent): Boolean {
-        return false
-    }
-
     override fun onDoubleTap(motionEvent: MotionEvent): Boolean {
         fitToScreen()
         return false
     }
 
-    override fun onDoubleTapEvent(motionEvent: MotionEvent): Boolean {
-        return false
-    }
+    override fun onDoubleTapEvent(motionEvent: MotionEvent): Boolean { return false }
+    override fun onSingleTapConfirmed(motionEvent: MotionEvent): Boolean { return false }
+    override fun onLongPress(motionEvent: MotionEvent) {}
+    override fun onFling(motionEvent: MotionEvent, motionEvent1: MotionEvent, v: Float, v1: Float): Boolean { return false }
+    override fun onDown(motionEvent: MotionEvent): Boolean { return false }
+    override fun onShowPress(motionEvent: MotionEvent) {}
+    override fun onSingleTapUp(motionEvent: MotionEvent): Boolean { return false }
+    override fun onScroll(motionEvent: MotionEvent, motionEvent1: MotionEvent, v: Float, v1: Float): Boolean { return false }
 
     companion object {
-
-        // Image States
         const val NONE = 0
         const val DRAG = 1
         const val ZOOM = 2
     }
-
 }
