@@ -12,6 +12,20 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/JPicsTheme">
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="fr.curlyspiker.jpics.fileprovider"
+            android:grantUriPermissions="true"
+            android:exported="false">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/filepaths" />
+        </provider>
+
+        <activity
+            android:name=".ArchiveActivity"
+            android:exported="false" />
         <activity
             android:name=".BaseActivity"
             android:exported="false" />
@@ -32,7 +46,7 @@
         <activity
             android:name=".ImageViewerActivity"
             android:theme="@style/ImageViewerTheme"
-            android:windowSoftInputMode="adjustPan|adjustResize"/>
+            android:windowSoftInputMode="adjustPan|adjustResize" />
         <activity
             android:name=".MainActivity"
             android:exported="true">

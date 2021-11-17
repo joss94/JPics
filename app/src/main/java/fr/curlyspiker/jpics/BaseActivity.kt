@@ -19,7 +19,6 @@ open class BaseActivity : AppCompatActivity() {
         val autoLogin = prefs.getBoolean("auto_login", false)
         PiwigoServerHelper.serverUrl = url?:""
 
-
         PiwigoSession.checkStatus {
             if(!PiwigoSession.logged) {
                 if(autoLogin) {
@@ -43,13 +42,17 @@ open class BaseActivity : AppCompatActivity() {
         ContextCompat.startActivity(this, intent, null)
     }
 
+    open fun proceedToApp() {
+        val intent = Intent(this, MainActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        ContextCompat.startActivity(this, intent, null)
+    }
+
     private fun doLogin(url: String, username: String, password: String) {
         PiwigoServerHelper.serverUrl = url
         PiwigoSession.login(username, password) { success ->
             if(success) {
-                val intent = Intent(this, MainActivity::class.java)
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                ContextCompat.startActivity(this, intent, null)
+                proceedToApp()
             }
             else {
                 goToLogin()

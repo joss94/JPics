@@ -2,21 +2,30 @@ package fr.curlyspiker.jpics
 
 import android.Manifest
 import android.app.AlertDialog
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.text.InputType
+import android.util.Log
 import android.view.*
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.viewpager.widget.PagerAdapter
 import androidx.viewpager.widget.ViewPager
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.squareup.picasso.Picasso
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -133,6 +142,7 @@ class ImageViewerActivity : AppCompatActivity() {
             override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
                 var out = true
                 when (item?.itemId) {
+                    R.id.action_share -> shareImage()
                     R.id.action_download -> downloadImage()
                     R.id.action_move -> moveImage()
                     R.id.action_delete -> deleteImage()
@@ -164,15 +174,14 @@ class ImageViewerActivity : AppCompatActivity() {
 
                 val creationString = info.optString("date_creation", "")
                 try {
-                    val creationDate = SimpleDateFormat("yyyy-MM-dd HH:mm:ss").parse(creationString) ?: Date()
-                    val format = SimpleDateFormat("EEE dd MMMM yyyy HH:mm:ss", Locale.US)
-                    infoCreationDate.text = format.format(creationDate)
+                    val creationDate = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).parse(creationString) ?: Date()
+                    infoCreationDate.text = SimpleDateFormat("EEE dd MMMM yyyy HH:mm:ss", Locale.US).format(creationDate)
                 } catch (e: java.lang.Exception) {}
 
 
 
                 var albumsTxt = ""
-                currentPic().getCategories().forEach { c -> albumsTxt += "${c.name} - " }
+                CategoriesManager.getCategoriesOf(currentPicId).forEach { c -> albumsTxt += "${c.name} - " }
                 infoAlbums.text = if(albumsTxt.isEmpty()) "None" else albumsTxt.subSequence(0, albumsTxt.length - 3)
 
                 infoSize.text = getString(R.string.size_info).format(info.optString("width", "0").toInt(), info.optString("height", "0").toInt())
@@ -187,6 +196,47 @@ class ImageViewerActivity : AppCompatActivity() {
                 infoTags.text = if(tagsTxt.isEmpty()) "None" else tagsTxt.subSequence(0, tagsTxt.length - 3)
             }
         }
+    }
+
+    private fun shareImage() {
+        val path = cacheDir.absolutePath + File.separator + "/images"
+        val target = object : com.squareup.picasso.Target {
+            override fun onBitmapLoaded(bitmap: Bitmap, arg1: Picasso.LoadedFrom?) {
+                try {
+                    val folder = File(path)
+                    if(!folder.exists()) { folder.mkdirs() }
+                    val file = File(folder.path + File.separator + "image_0.jpg")
+                    file.createNewFile()
+                    val stream = FileOutputStream(file)
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
+                    stream.close()
+
+                    val contentUri = FileProvider.getUriForFile(
+                        applicationContext,
+                        "fr.curlyspiker.jpics.fileprovider",
+                        file
+                    )
+                    val shareIntent: Intent = Intent().apply {
+                        action = Intent.ACTION_SEND
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        type = contentResolver.getType(contentUri)
+                        putExtra(Intent.EXTRA_STREAM, contentUri)
+                    }
+                    try {
+                        startActivity(Intent.createChooser(shareIntent, "Select sharing app"))
+                    } catch (e: ActivityNotFoundException) {
+                        Toast.makeText(applicationContext, "No App Available", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+            override fun onBitmapFailed(errorDrawable: Drawable?) {
+                Log.d("TAG", "Error during download !")
+            }
+            override fun onPrepareLoad(placeHolderDrawable: Drawable?) {}
+        }
+        Picasso.with(this).load(currentPic().fullResUrl).into(target)
     }
 
     private fun downloadImage() {
@@ -217,14 +267,12 @@ class ImageViewerActivity : AppCompatActivity() {
 
         builder.setPositiveButton("OK") { _, _ ->
             selectCategory { c ->
-                c?.let {
-                    PiwigoSession.movePictures(listOf(picture), checkedItem == 0, it) {
-                        CategoriesManager.refreshAllPictures {
-                            runOnUiThread {
-                                pagerAdapter.pictures = CategoriesManager.currentlyDisplayedList?.toList() ?: listOf()
-                            }
-                            updateBottomSheet()
+                PiwigoSession.movePictures(listOf(picture), checkedItem == 0, c) {
+                    CategoriesManager.refreshAllPictures {
+                        runOnUiThread {
+                            pagerAdapter.pictures = CategoriesManager.currentlyDisplayedList.toList()
                         }
+                        updateBottomSheet()
                     }
                 }
             }

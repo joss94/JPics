@@ -43,7 +43,22 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:padding="15dp"
-            android:text="Sync options"/>
+            android:text="Sync options"
+            android:background="@color/dark_gray"/>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@drawable/line"
+            android:backgroundTint="@color/light_gray"/>
+
+        <TextView
+            android:id="@+id/archive_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="15dp"
+            android:text="Archive"
+            android:background="@color/dark_gray"/>
 
     </LinearLayout>
 

@@ -36,11 +36,6 @@ class ExplorerFragment (private var startCat: Category? = null) :
     private lateinit var categoriesView: RecyclerView
     private var categoriesAdapter: CategoryListAdapter? = null
 
-    private lateinit var selectCategoriesView: RecyclerView
-    private var selectCategoryListAdapter: SelectCategoryListAdapter? = null
-    private lateinit var selectCategoriesOkButton: Button
-    private lateinit var selectCategoriesBackButton: Button
-
     private lateinit var albumTitleLayout: LinearLayout
     private lateinit var albumTitleEditLayout: LinearLayout
     private lateinit var albumPathLayout: LinearLayout
@@ -50,8 +45,6 @@ class ExplorerFragment (private var startCat: Category? = null) :
     private lateinit var albumEditConfirmButton: ImageButton
 
     private var imagesListFragment: ImageListFragment = ImageListFragment(startCat)
-
-    private lateinit var categorySelectBottomSheet: BottomSheetBehavior<View>
 
     var currentCategory: Category = CategoriesManager.fromID(0)!!
 
@@ -63,12 +56,6 @@ class ExplorerFragment (private var startCat: Category? = null) :
         super.onViewCreated(view, savedInstanceState)
 
         mContext = requireContext()
-
-        categorySelectBottomSheet = BottomSheetBehavior.from(view.findViewById(R.id.cat_select_bottom_sheet))
-        categorySelectBottomSheet.state = BottomSheetBehavior.STATE_HIDDEN
-        categorySelectBottomSheet.isFitToContents = false
-        categorySelectBottomSheet.halfExpandedRatio = 0.3f
-        categorySelectBottomSheet.peekHeight = 100
 
         progressLayout = view.findViewById(R.id.progress_layout)
         progressBar = view.findViewById(R.id.progress_bar)
@@ -101,15 +88,6 @@ class ExplorerFragment (private var startCat: Category? = null) :
         categoriesAdapter = CategoryListAdapter(this)
         categoriesView.layoutManager = LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false)
         categoriesView.adapter  = categoriesAdapter
-
-        selectCategoriesView = view.findViewById(R.id.select_categories_list_view)
-        selectCategoriesView.isNestedScrollingEnabled = true
-        selectCategoryListAdapter = SelectCategoryListAdapter(this)
-        selectCategoriesView.layoutManager = LinearLayoutManager(requireContext(), LinearLayoutManager.VERTICAL, false)
-        selectCategoriesView.adapter = selectCategoryListAdapter
-
-        selectCategoriesOkButton = view.findViewById(R.id.select_cat_ok)
-        selectCategoriesBackButton = view.findViewById(R.id.select_cat_back)
 
         requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -337,7 +315,6 @@ class ExplorerFragment (private var startCat: Category? = null) :
 
     override fun onCategoriesReady() {
         categoriesAdapter?.refresh()
-        selectCategoryListAdapter?.refresh()
         activity?.runOnUiThread {
             swipeContainer.visibility = if(currentCategory.getChildren().isNotEmpty()) View.VISIBLE else View.GONE
         }
@@ -473,54 +450,6 @@ class ExplorerFragment (private var startCat: Category? = null) :
 
         override fun getItemCount(): Int {
             return if(selecting) categories.size else categories.size + 1
-        }
-    }
-
-    class SelectCategoryListAdapter(private val fragment: ExplorerFragment) :
-        RecyclerView.Adapter<SelectCategoryListAdapter.ViewHolder>(){
-
-        private var categories = mutableListOf<Category>()
-        private var currentCategory = CategoriesManager.fromID(0)!!
-
-        fun refresh() {
-            currentCategory = CategoriesManager.fromID(currentCategory.id) ?: CategoriesManager.fromID(0)!!
-            categories = currentCategory.getChildren().toMutableList()
-            fragment.activity?.runOnUiThread {
-                notifyDataSetChanged()
-            }
-        }
-
-        class ViewHolder (view: View) : RecyclerView.ViewHolder(view) {
-            val icon: ImageView = view.findViewById(R.id.cateogry_tile_image)
-            val title: TextView = view.findViewById(R.id.cateogry_tile_title)
-            val elementsLabel: TextView = view.findViewById(R.id.cateogry_tile_number_of_elements)
-        }
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-            return ViewHolder(LayoutInflater.from(fragment.requireContext()).inflate(R.layout.category_row, parent, false))
-        }
-
-        override fun onBindViewHolder(vh: ViewHolder, position: Int) {
-            val category = categories[position]
-
-            vh.title.text = category.name
-            val nSubAlbums = category.getChildren().size
-            vh.elementsLabel.text = if (nSubAlbums > 0) "$nSubAlbums sub-albums" else ""
-
-            if (category.getThumbnailUrl().isNotEmpty()) {
-                Picasso.with(fragment.requireContext()).load(category.getThumbnailUrl()).into(vh.icon)
-            } else {
-                vh.icon.setImageDrawable(AppCompatResources.getDrawable(fragment.requireContext(), R.drawable.image_icon))
-            }
-
-            vh.icon.setOnClickListener {
-                currentCategory = category
-                refresh()
-            }
-        }
-
-        override fun getItemCount(): Int {
-            return categories.size
         }
     }
 

@@ -30,6 +30,11 @@ class AccountActivity : AppCompatActivity() {
             val intent = Intent(this, SyncActivity::class.java)
             ContextCompat.startActivity(this, intent, null)
         }
+
+        findViewById<TextView>(R.id.archive_button).setOnClickListener {
+            val intent = Intent(this, ArchiveActivity::class.java)
+            ContextCompat.startActivity(this, intent, null)
+        }
     }
 
     private fun logout() {

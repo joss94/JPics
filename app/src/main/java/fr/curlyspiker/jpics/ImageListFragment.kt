@@ -1,20 +1,23 @@
 package fr.curlyspiker.jpics
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.AlertDialog
-import android.content.DialogInterface
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.graphics.Rect
+import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.util.Log
 import android.view.*
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
@@ -25,23 +28,17 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SortedList
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.squareup.picasso.Picasso
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import me.zhanghai.android.fastscroll.FastScrollerBuilder
 import me.zhanghai.android.fastscroll.PopupTextProvider
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
-import android.annotation.SuppressLint
-import android.content.DialogInterface.OnMultiChoiceClickListener
-import android.util.Log
-import com.google.android.flexbox.FlexDirection
-import com.google.android.flexbox.FlexWrap
-import com.google.android.flexbox.FlexboxLayoutManager
-import com.google.android.flexbox.JustifyContent
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import java.io.File
+import androidx.core.content.FileProvider
+import kotlin.collections.ArrayList
 
 
 class SpacesItemDecoration(private val space: Int, private val span: Int) : RecyclerView.ItemDecoration() {
@@ -131,8 +128,9 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
             override fun onSelectionEnabled() {
                 actionMode = activity?.startActionMode(object: ActionMode.Callback {
                     override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
-                        val menuInflater: MenuInflater? = mode?.menuInflater
-                        menuInflater?.inflate(R.menu.explorer_menu, menu)
+                        val menuInflater: MenuInflater? = activity?.menuInflater
+                        val menuRes = if(cat?.id == CategoriesManager.getArchiveCat()?.id) R.menu.explorer_menu_archive else R.menu.explorer_menu
+                        menuInflater?.inflate(menuRes, menu)
                         picturesAdapter?.selecting = true
                         addButton.visibility = View.INVISIBLE
                         refreshButton.visibility = View.INVISIBLE
@@ -140,14 +138,23 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
                     }
 
                     override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
-                        when (item?.itemId) {
-                            R.id.action_download -> downloadSelectedImages()
-                            R.id.action_select_all -> picturesAdapter?.selectAll()
-                            R.id.action_move -> moveSelectedImages()
-                            R.id.action_delete -> deleteSelectedImages()
-                            R.id.action_add_to_cat -> addSelectedImagesToCat()
-                            R.id.action_remove_from_album -> removeSelectedImagesFromAlbum()
-                            R.id.action_creation_date -> editSelectedImagesCreationDate()
+                        picturesAdapter?.let{
+                            val selectedPics = it.getSelectedPictures()
+                            if(selectedPics.isNotEmpty()) {
+                                when (item?.itemId) {
+                                    R.id.action_download -> downloadImages(selectedPics)
+                                    R.id.action_share -> shareImages(selectedPics)
+                                    R.id.action_select_all -> picturesAdapter?.selectAll()
+                                    R.id.action_move -> moveImages(selectedPics)
+                                    R.id.action_delete -> deleteImages(selectedPics)
+                                    R.id.action_delete_definitive -> deleteDefinitiveImages(selectedPics)
+                                    R.id.action_restore -> restoreImages(selectedPics)
+                                    R.id.action_add_to_cat -> addImagesToCat(selectedPics)
+                                    R.id.action_remove_from_album -> removeImagesFromAlbum(selectedPics)
+                                    R.id.action_creation_date -> editImagesCreationDate(selectedPics)
+                                    else -> {}
+                                }
+                            }
                         }
                         return true
                     }
@@ -183,6 +190,7 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
         onItemsChanged()
 
         onImagesReady(cat?.id)
+        refreshPictures()
     }
 
     override fun onDestroyView() {
@@ -237,47 +245,45 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
         }
 
         selectCategory { c ->
-            c?.let{
-                // Need to show the progress bar now because it takes quite some time to load the images from disk
-                activity?.runOnUiThread {
-                    progressLayout.visibility = View.VISIBLE
-                    progressBar.progress = 0
-                    progressTitle.text = getString(R.string.read_from_disk)
-                }
+            // Need to show the progress bar now because it takes quite some time to load the images from disk
+            activity?.runOnUiThread {
+                progressLayout.visibility = View.VISIBLE
+                progressBar.progress = 0
+                progressTitle.text = getString(R.string.read_from_disk)
+            }
 
-                val progressListener = this
-                lifecycleScope.launch {
-                    val images = mutableListOf<PiwigoSession.ImageUploadData>()
-                    uris.forEach { uri ->
-                        val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                            val source = ImageDecoder.createSource(requireContext().contentResolver, uri)
-                            ImageDecoder.decodeBitmap(source)
-                        } else {
-                            MediaStore.Images.Media.getBitmap(requireContext().contentResolver, uri)
-                        }
-
-                        var filename = ""
-                        var date = Calendar.getInstance().time.time
-
-                        val cursor = requireContext().contentResolver.query(uri, null, null, null, null)
-                        if(cursor != null) {
-                            cursor.moveToFirst()
-
-                            val dateIndex: Int = cursor.getColumnIndexOrThrow("last_modified")
-                            date = cursor.getString(dateIndex).toLong()
-
-                            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                            filename = cursor.getString(nameIndex)
-
-                            cursor.close()
-                        }
-
-
-                        images.add(PiwigoSession.ImageUploadData(bitmap, filename, Date(date)))
+            val progressListener = this
+            lifecycleScope.launch {
+                val images = mutableListOf<PiwigoSession.ImageUploadData>()
+                uris.forEach { uri ->
+                    val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        val source = ImageDecoder.createSource(requireContext().contentResolver, uri)
+                        ImageDecoder.decodeBitmap(source)
+                    } else {
+                        MediaStore.Images.Media.getBitmap(requireContext().contentResolver, uri)
                     }
 
-                    PiwigoSession.addImages(images, c, progressListener)
+                    var filename = ""
+                    var date = Calendar.getInstance().time.time
+
+                    val cursor = requireContext().contentResolver.query(uri, null, null, null, null)
+                    if(cursor != null) {
+                        cursor.moveToFirst()
+
+                        val dateIndex: Int = cursor.getColumnIndexOrThrow("last_modified")
+                        date = cursor.getString(dateIndex).toLong()
+
+                        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        filename = cursor.getString(nameIndex)
+
+                        cursor.close()
+                    }
+
+
+                    images.add(PiwigoSession.ImageUploadData(bitmap, filename, Date(date)))
                 }
+
+                PiwigoSession.addImages(images, c, progressListener)
             }
         }
     }
@@ -307,13 +313,13 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
         }
     }
 
-    fun downloadSelectedImages() {
+    fun downloadImages(pictures: List<Int>) {
 
         fun downloadImagesPermissionGranted() {
             val path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).path + "/JPics"
             onStarted()
             var downloaded = 0
-            picturesAdapter?.getSelectedPictures()?.forEachIndexed { i, pic ->
+            pictures.forEach { pic ->
                 CategoriesManager.pictures.getValue(pic).saveToLocal(requireContext(), path) {
                     downloaded += 1
                     onProgress(downloaded.toFloat() / pics.size)
@@ -335,108 +341,152 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
         }
     }
 
-    private fun moveSelectedImages() {
-        picturesAdapter?.let { adapter ->
+    private fun moveImages(pictures: List<Int>) {
 
-            val builder = AlertDialog.Builder(requireContext(), R.style.AlertStyle)
-            builder.setTitle("What do you want to do ?")
-            var checkedItem = 0
-            val labels = arrayOf("Add to other album", "Move to different location")
-            builder.setSingleChoiceItems(labels, checkedItem) { _, i -> checkedItem = i }
-            builder.setCancelable(true)
-
-            builder.setPositiveButton("OK") { _, _ ->
+        var checkedItem = 0
+        val labels = arrayOf("Add to other album", "Move to different location")
+        val builder = AlertDialog.Builder(requireContext(), R.style.AlertStyle)
+            .setSingleChoiceItems(labels, checkedItem) { _, i -> checkedItem = i }
+            .setTitle("What do you want to do ?")
+            .setCancelable(true)
+            .setPositiveButton("OK") { _, _ ->
                 val excludeList = mutableListOf<Category>()
                 cat?.let { excludeList.add(it) }
                 selectCategory(excludeList) { c ->
-                    c?.let {
-                        PiwigoSession.movePictures(adapter.getSelectedPictures(), checkedItem == 0, it) {
-                            refreshPictures()
-                            CategoriesManager.refreshPictures(it.id)
-                            activity?.runOnUiThread{ actionMode?.finish() }
-                        }
-                    }
-                }
-            }
-
-            builder.create().show()
-        }
-    }
-
-    private fun removeSelectedImagesFromAlbum() {
-        picturesAdapter?.let { adapter ->
-            val selectedPictures = adapter.getSelectedPictures()
-
-            CategoriesManager
-            val removablePictures = selectedPictures.filter { id -> CategoriesManager.pictures.getValue(id).getCategories().size > 1 }
-            if(removablePictures.size != selectedPictures.size) {
-                Toast.makeText(requireContext(), "Some pictures could not be removed because they only belong to this album", Toast.LENGTH_LONG).show()
-            }
-
-            val catId = cat?.id
-            catId?.let {
-                PiwigoSession.removePicturesFromAlbum(removablePictures, catId) {
-                    refreshPictures()
-                    activity?.runOnUiThread{ actionMode?.finish() }
-                }
-            }
-
-        }
-    }
-
-    private fun addSelectedImagesToCat() {
-        picturesAdapter?.let { adapter ->
-            val selectedPictures = adapter.getSelectedPictures()
-            selectCategory { c ->
-                c?.let {
-                    PiwigoSession.addPicturesToCategory(selectedPictures, it) {
+                    PiwigoSession.movePictures(pictures, checkedItem == 0, c) {
                         refreshPictures()
+                        CategoriesManager.refreshPictures(c.id)
                         activity?.runOnUiThread{ actionMode?.finish() }
                     }
                 }
             }
-        }
+
+        builder.create().show()
     }
 
-    private fun deleteSelectedImages() {
-        picturesAdapter?.let { adapter ->
-            val selectedPictures = adapter.getSelectedPictures()
-            AlertDialog.Builder(requireContext(), R.style.AlertStyle)
-                .setTitle("Delete images")
-                .setMessage("Are you sure you want to delete these images?")
-                .setIcon(android.R.drawable.ic_dialog_alert)
-                .setPositiveButton("Yes") { _, _ -> PiwigoSession.deletePictures(selectedPictures, this) }
-                .setNegativeButton("Cancel", null).show()
+    private fun removeImagesFromAlbum(pictures: List<Int>) {
+        val removablePictures = pictures.filter { id -> CategoriesManager.getCategoriesOf(id).size > 1 }
+        if(removablePictures.size != pictures.size) {
+            Toast.makeText(requireContext(), "Some pictures could not be removed because they only belong to this album", Toast.LENGTH_LONG).show()
         }
-    }
 
-    private fun editSelectedImagesCreationDate() {
-
-        picturesAdapter?.let { adapter ->
-            val selectedPictures = adapter.getSelectedPictures()
-
-            fun setPictureCreationDate(index: Int, creationDate: Long) {
-                if(index >= selectedPictures.size) {
-                    refreshPictures()
-                    onCompleted()
-                    return
-                }
-                onProgress(index.toFloat() / selectedPictures.size)
-                val p = selectedPictures[index]
-                PiwigoSession.setPictureInfo(p, creationDate = creationDate)  {
-                    setPictureCreationDate(index + 1, creationDate)
-                }
+        cat?.let { c ->
+            PiwigoSession.removePicturesFromAlbum(removablePictures, c.id) {
+                refreshPictures()
+                activity?.runOnUiThread{ actionMode?.finish() }
             }
-            Utils.getDatetime(parentFragmentManager, CategoriesManager.pictures.getValue(selectedPictures[0]).creationDate) {
-                onStarted()
-                setPictureCreationDate(0, it)
-            }
+        }
 
-            actionMode?.finish()
+    }
+
+    private fun addImagesToCat(pictures: List<Int>) {
+        selectCategory { c ->
+            PiwigoSession.movePictures(pictures, true, c, this) {
+                refreshPictures()
+                activity?.runOnUiThread{ actionMode?.finish() }
+            }
         }
     }
 
-    private fun selectCategory(excludeList : List<Category> = listOf(), callback: (cat: Category?) -> Unit) {
+    private fun deleteImages(pictures: List<Int>) {
+        AlertDialog.Builder(requireContext(), R.style.AlertStyle)
+            .setTitle("Delete images")
+            .setMessage("Are you sure you want to delete these images? You will be able to restore them from the archive")
+            .setIcon(android.R.drawable.ic_dialog_alert)
+            .setPositiveButton("Yes") { _, _ -> PiwigoSession.archivePictures(pictures, this) }
+            .setNegativeButton("Cancel", null).show()
+    }
+
+    private fun deleteDefinitiveImages(pictures: List<Int>) {
+        AlertDialog.Builder(requireContext(), R.style.AlertStyle)
+            .setTitle("Delete images")
+            .setMessage("Are you sure you want to delete these images? This will be definitive !")
+            .setIcon(android.R.drawable.ic_dialog_alert)
+            .setPositiveButton("Yes") { _, _ -> PiwigoSession.deletePictures(pictures, this) }
+            .setNegativeButton("Cancel", null).show()
+    }
+
+    private fun restoreImages(pictures: List<Int>) {
+        AlertDialog.Builder(requireContext(), R.style.AlertStyle)
+            .setTitle("Restore images")
+            .setMessage("Are you sure you want to restore these images?")
+            .setIcon(android.R.drawable.ic_dialog_alert)
+            .setPositiveButton("Yes") { _, _ -> PiwigoSession.restorePictures(pictures, this) }
+            .setNegativeButton("Cancel", null).show()
+    }
+
+    private fun shareImages(pictures: List<Int>) {
+
+        val path = requireContext().cacheDir.absolutePath + File.separator + "/images"
+        val listOfUris = ArrayList<Uri>()
+        pictures.forEachIndexed { i, p ->
+            val target = object : com.squareup.picasso.Target {
+                override fun onBitmapLoaded(bitmap: Bitmap, arg1: Picasso.LoadedFrom?) {
+                    try {
+                        val folder = File(path)
+                        if(!folder.exists()) { folder.mkdirs() }
+                        val file = File(folder.path + File.separator + "image_$i.jpg")
+                        file.createNewFile()
+                        val stream = FileOutputStream(file)
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
+                        stream.close()
+
+                        val contentUri = FileProvider.getUriForFile(
+                            requireContext(),
+                            "fr.curlyspiker.jpics.fileprovider",
+                            file
+                        )
+                        listOfUris.add(contentUri)
+                        if(listOfUris.size == pictures.size) {
+                            val shareIntent: Intent = Intent().apply {
+                                action = Intent.ACTION_SEND_MULTIPLE
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                type = "*/*"
+                                putParcelableArrayListExtra(Intent.EXTRA_STREAM, listOfUris)
+                            }
+                            try {
+                                actionMode?.finish()
+                                startActivity(Intent.createChooser(shareIntent, "Select sharing app"))
+                            } catch (e: ActivityNotFoundException) {
+                                Toast.makeText(activity, "No App Available", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        actionMode?.finish()
+                        e.printStackTrace()
+                    }
+                }
+                override fun onBitmapFailed(errorDrawable: Drawable?) {
+                    actionMode?.finish()
+                    Log.d("TAG", "Error during download !")
+                }
+                override fun onPrepareLoad(placeHolderDrawable: Drawable?) {}
+            }
+            Picasso.with(requireContext()).load(CategoriesManager.pictures.getValue(p).fullResUrl).into(target)
+        }
+    }
+
+    private fun editImagesCreationDate(pictures: List<Int>) {
+        fun setPictureCreationDate(index: Int, creationDate: Long) {
+            if(index >= pictures.size) {
+                refreshPictures()
+                onCompleted()
+                return
+            }
+            onProgress(index.toFloat() / pictures.size)
+            PiwigoSession.setPictureInfo(pictures[index], creationDate = creationDate)  {
+                setPictureCreationDate(index + 1, creationDate)
+            }
+        }
+        Utils.getDatetime(parentFragmentManager, CategoriesManager.pictures.getValue(pictures[0]).creationDate) {
+            onStarted()
+            setPictureCreationDate(0, it)
+        }
+
+        actionMode?.finish()
+    }
+
+    private fun selectCategory(excludeList : List<Category> = listOf(), callback: (cat: Category) -> Unit) {
         val dialog = CategoryPicker(requireContext())
         dialog.setOnCategorySelectedCallback(callback)
         dialog.excludeCategories(excludeList)
@@ -449,38 +499,23 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
     }
 
     private fun getFilteredPics(query: String) : List<Int> {
-        if(query.isEmpty()) {
-            return pics
-        }
+        if(query.isEmpty()) { return pics }
 
         val queryLow = query.lowercase()
         val filteredTags = PiwigoSession.getAllTags().filter { t -> t.name.lowercase().contains(queryLow) }
         val filteredCats = CategoriesManager.categories.filter { c -> c.name.lowercase().contains(queryLow) }
 
         return pics.filter { id ->
-
             val pic = CategoriesManager.pictures.getValue(id)
-            var isInFilter = false
+            pic.name.lowercase().contains(queryLow) || filteredTags.intersect(pic.getTags()).isNotEmpty() ||
+                CategoriesManager.getCategoriesOf(id, recursive = true).intersect(filteredCats).isNotEmpty()
 
-            if(pic.name.lowercase().contains(queryLow)) {
-                isInFilter = true
-            }
-
-            else if(filteredTags.intersect(pic.getTags()).isNotEmpty()) {
-                isInFilter = true
-            }
-
-            else if(pic.getCategories(recursive = true).intersect(filteredCats).isNotEmpty()) {
-                isInFilter = true
-            }
-
-            isInFilter
         }
     }
 
     override fun onImagesReady(catId: Int?) {
         val currentCategory = cat
-        if(currentCategory == null || catId == currentCategory.id || catId == null) {
+        if(catId == currentCategory?.id) {
             pics = CategoriesManager.getPictures(cat?.id).toMutableList()
             onFilterChanged()
         }
@@ -601,10 +636,11 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
                     selectionListener?.onSelectionEnabled()
                 }
             }
-            notifyDataSetChanged()
             sortedPictures[index].checked = checked
+            notifyItemChanged(index)
         }
 
+        @SuppressLint("NotifyDataSetChanged")
         fun exitSelectionMode() {
             selecting = false
             for(i in 0 until sortedPictures.size()) {
@@ -613,6 +649,7 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
             notifyDataSetChanged()
         }
 
+        @SuppressLint("NotifyDataSetChanged")
         fun selectAll() {
             selecting = true
             for(i in 0 until sortedPictures.size()) {

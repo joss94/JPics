@@ -9,6 +9,7 @@ import com.squareup.picasso.Picasso
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -23,6 +24,8 @@ class Picture (val id: Int, var name: String) {
 
     var creationDate: Date
     var creationDay: Date
+
+    var isArchived = false
 
     private var mInfo: JSONObject? = null
 
@@ -63,27 +66,6 @@ class Picture (val id: Int, var name: String) {
             override fun onPrepareLoad(placeHolderDrawable: Drawable?) {}
         }
         Picasso.with(context).load(fullResUrl).into(target)
-    }
-
-    fun getCategories(recursive : Boolean = false) : List<Category>{
-
-        fun addToList(out: MutableList<Category>, c: Category, recursive: Boolean) {
-            if(!out.contains(c)) {
-                out.add(c)
-
-                if(recursive) {
-                    val parents = c.getHierarchy()
-                    parents.forEach { parent ->
-                        addToList(out, parent, recursive)
-                    }
-                }
-            }
-        }
-
-        val out = mutableListOf<Category>()
-        CategoriesManager.categories.filter { c -> c.picturesIDs.contains(id) }.forEach { c ->addToList(out, c, recursive) }
-
-        return out
     }
 
     fun getTags() : List<PiwigoSession.PicTag> {
@@ -131,6 +113,15 @@ class Picture (val id: Int, var name: String) {
             cal.set(Calendar.MINUTE, 0)
             cal.set(Calendar.SECOND, 0)
             p.creationDay = cal.time
+
+            val catsArray = json.optJSONArray("categories") ?: JSONArray()
+            for(i in 0 until catsArray.length()) {
+                val catId = catsArray.getJSONObject(i).optInt("id")
+                if(catId == CategoriesManager.getArchiveCat()?.id) {
+                    p.isArchived = true
+                    break
+                }
+            }
 
             return p
         }

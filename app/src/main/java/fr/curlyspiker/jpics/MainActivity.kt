@@ -37,9 +37,7 @@ class MainActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
-
         setContentView(R.layout.activity_main)
-
         setSupportActionBar(findViewById(R.id.my_toolbar))
 
         bottomView = findViewById(R.id.bottom_nav)
@@ -76,7 +74,7 @@ class MainActivity : BaseActivity() {
             albumsFragment = (this.supportFragmentManager.findFragmentByTag("albums") as ExplorerFragment?) ?: ExplorerFragment(CategoriesManager.fromID(0))
         }
 
-        CategoriesManager.refreshCategories { CategoriesManager.refreshAllPictures {} }
+        CategoriesManager.refreshCategories {}
 
         val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
             if (isGranted) {
@@ -225,7 +223,7 @@ class MainActivity : BaseActivity() {
             .build()
 
         // Periodic time is limited by Android to 15 min, it will not repeat faster than this...
-        val instantUploadRequest = PeriodicWorkRequestBuilder<InstantUploaderWorker>(10, TimeUnit.SECONDS)
+        val instantUploadRequest = PeriodicWorkRequestBuilder<InstantUploaderWorker>(16, TimeUnit.MINUTES)
             .setConstraints(constraints)
             .setInitialDelay(2L, TimeUnit.SECONDS)
             .build()

@@ -11,31 +11,11 @@ class SplashScreenActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_splash_screen)
-    }
 
-    private fun doLogin(url: String, username: String, password: String) {
-        PiwigoServerHelper.serverUrl = url
-        PiwigoSession.login(username, password) { success ->
-            if(success) {
-                val intent = Intent(this, MainActivity::class.java)
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                ContextCompat.startActivity(this, intent, null)
-            }
-            else {
-                goToLogin()
+        PiwigoSession.checkStatus {
+            if(PiwigoSession.logged) {
+                proceedToApp()
             }
         }
-    }
-
-    private fun goToLogin() {
-        val intent = Intent(this, LoginActivity::class.java)
-        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        ContextCompat.startActivity(this, intent, null)
-    }
-
-    private fun proceedToApp() {
-        val intent = Intent(this, MainActivity::class.java)
-        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        ContextCompat.startActivity(this, intent, null)
     }
 }

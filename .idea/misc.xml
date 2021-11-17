@@ -6,16 +6,21 @@
         <entry key="../../../../../../layout/custom_preview.xml" value="0.41822916666666665" />
         <entry key="app/src/main/res/drawable/add_big.xml" value="0.215625" />
         <entry key="app/src/main/res/drawable/add_button.xml" value="0.215625" />
+        <entry key="app/src/main/res/drawable/check_circle.xml" value="0.371875" />
         <entry key="app/src/main/res/drawable/cloud_off.xml" value="0.3260416666666667" />
         <entry key="app/src/main/res/drawable/cloud_on.xml" value="0.3260416666666667" />
+        <entry key="app/src/main/res/drawable/line.xml" value="0.21614583333333334" />
         <entry key="app/src/main/res/drawable/refresh.xml" value="0.215625" />
         <entry key="app/src/main/res/drawable/refresh_big.xml" value="0.215625" />
         <entry key="app/src/main/res/drawable/refresh_button.xml" value="0.215625" />
+        <entry key="app/src/main/res/drawable/share.xml" value="0.371875" />
         <entry key="app/src/main/res/drawable/tag_rounded_background.xml" value="0.559375" />
-        <entry key="app/src/main/res/layout/activity_account.xml" value="0.19375" />
+        <entry key="app/src/main/res/layout/activity_account.xml" value="0.4343891402714932" />
+        <entry key="app/src/main/res/layout/activity_archive.xml" value="0.2" />
         <entry key="app/src/main/res/layout/activity_base.xml" value="0.16614583333333333" />
         <entry key="app/src/main/res/layout/activity_image_viewer.xml" value="0.19429347826086957" />
         <entry key="app/src/main/res/layout/activity_login.xml" value="0.19895833333333332" />
+        <entry key="app/src/main/res/layout/activity_main.xml" value="0.16666666666666666" />
         <entry key="app/src/main/res/layout/activity_sync.xml" value="0.22" />
         <entry key="app/src/main/res/layout/category_row.xml" value="0.2641843971631206" />
         <entry key="app/src/main/res/layout/category_tile.xml" value="0.2641843971631206" />
@@ -32,7 +37,12 @@
         <entry key="app/src/main/res/layout/sync_folder_row.xml" value="0.19375" />
         <entry key="app/src/main/res/layout/tagTile.xml" value="0.2796875" />
         <entry key="app/src/main/res/layout/tag_tile.xml" value="0.3020833333333333" />
+        <entry key="app/src/main/res/menu/bottom_menu.xml" value="0.20462962962962963" />
+        <entry key="app/src/main/res/menu/explorer_category_menu.xml" value="0.20462962962962963" />
         <entry key="app/src/main/res/menu/explorer_menu.xml" value="0.5432291666666667" />
+        <entry key="app/src/main/res/menu/explorer_menu_archive.xml" value="0.35572916666666665" />
+        <entry key="app/src/main/res/menu/viewer_menu.xml" value="0.2995614035087719" />
+        <entry key="app/src/main/res/xml/filepaths.xml" value="0.23333333333333334" />
       </map>
     </option>
   </component>

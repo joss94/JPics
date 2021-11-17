@@ -4,24 +4,30 @@
     xmlns:tools="http://schemas.android.com/tools"
     tools:context=".MainActivity">
 
-    <item android:id="@+id/action_download"
-        android:title="Download"
-        android:icon="@drawable/download"
-        android:showAsAction="always" />
-
-    <item android:id="@+id/action_info"
-        android:title="Info"
-        android:icon="@drawable/info"
-        android:showAsAction="always" />
-
-    <item android:id="@+id/action_delete"
-        android:title="Delete"
-        android:icon="@drawable/delete"
+    <item android:id="@+id/action_share"
+        android:title="Share"
+        android:icon="@drawable/share"
         android:showAsAction="always" />
 
     <item android:id="@+id/action_move"
         android:title="Move"
         android:icon="@drawable/folder"
         android:showAsAction="always" />
+
+    <item android:id="@+id/action_download"
+        android:title="Download"
+        android:icon="@drawable/download"
+        android:showAsAction="ifRoom" />
+
+    <item android:id="@+id/action_info"
+        android:title="Info"
+        android:icon="@drawable/info"
+        android:showAsAction="ifRoom" />
+
+    <item android:id="@+id/action_delete"
+        android:title="Delete"
+        android:icon="@drawable/delete"
+        android:showAsAction="never" />
+
 
 </menu>
