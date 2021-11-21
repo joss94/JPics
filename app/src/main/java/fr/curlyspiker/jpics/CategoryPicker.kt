@@ -17,14 +17,14 @@ import android.widget.*
 
 class CategoryPicker(context: Context) : Dialog(context) {
 
-    private var excludedCategories = mutableListOf<Category>()
+    private var excludedCategories = mutableListOf<Int>()
 
     private lateinit var categoriesView: RecyclerView
     private lateinit var categoriesAdapter: SelectCategoryListAdapter
     private lateinit var categoryName: TextView
     private lateinit var backButton: ImageButton
 
-    private var catSelectedCb: (c: Category) -> Unit = {}
+    private var catSelectedCb: (c: Int) -> Unit = {}
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,15 +60,15 @@ class CategoryPicker(context: Context) : Dialog(context) {
     }
 
     private fun onCategoryChanged() {
-        categoryName.text = categoriesAdapter.getCurrentCat().name
-        backButton.visibility = if(categoriesAdapter.getCurrentCat().getParent() == null) View.INVISIBLE else View.VISIBLE
+        categoryName.text = categoriesAdapter.getCurrentCat()?.name
+        backButton.visibility = if(PiwigoData.categories[categoriesAdapter.getCurrentCat()?.parentId] == null) View.INVISIBLE else View.VISIBLE
     }
 
-    fun setOnCategorySelectedCallback(cb: (c: Category) -> Unit) {
+    fun setOnCategorySelectedCallback(cb: (c: Int) -> Unit) {
         catSelectedCb = cb
     }
 
-    fun excludeCategories(cats: List<Category>) {
+    fun excludeCategories(cats: List<Int>) {
         excludedCategories = cats.toMutableList()
         if(this::categoriesAdapter.isInitialized){
             categoriesAdapter.refresh()
@@ -78,29 +78,26 @@ class CategoryPicker(context: Context) : Dialog(context) {
     class SelectCategoryListAdapter(private val picker: CategoryPicker) :
         RecyclerView.Adapter<SelectCategoryListAdapter.ViewHolder>(){
 
-        private var categories = mutableListOf<Category>()
-        private var currentCategory = CategoriesManager.fromID(0)!!
+        private var catIDs = mutableListOf<Int>()
+        private var currentCategory = 0
         private var selectedCategory = currentCategory
 
-        fun getCurrentCat() : Category {
-            return currentCategory
+        fun getCurrentCat() : Category? {
+            return PiwigoData.categories[currentCategory]
         }
 
-        fun getSelectedCat() : Category {
+        fun getSelectedCat() : Int {
             return selectedCategory
         }
 
         fun goToParent() {
-            currentCategory = currentCategory.getParent() ?: currentCategory
+            currentCategory = getCurrentCat()?.parentId ?: currentCategory
             selectedCategory = currentCategory
             refresh()
         }
 
         fun refresh() {
-            currentCategory = CategoriesManager.fromID(currentCategory.id) ?: CategoriesManager.fromID(0)!!
-            categories = currentCategory.getChildren().toMutableList().filter { c ->
-                picker.excludedCategories.firstOrNull{ other -> c.id == other.id} == null
-            }.toMutableList()
+            catIDs = (getCurrentCat()?.getChildren()?.filter { id -> id !in picker.excludedCategories }?.toMutableList() ?: listOf()).toMutableList()
             notifyDataSetChanged()
             picker.onCategoryChanged()
         }
@@ -118,37 +115,39 @@ class CategoryPicker(context: Context) : Dialog(context) {
         }
 
         override fun onBindViewHolder(vh: ViewHolder, position: Int) {
-            val category = categories[position]
+            val catId = catIDs[position]
+            val category = PiwigoData.categories[catId]
+            category?.let {
+                vh.title.text = category.name
+                val nSubAlbums = category.getChildren().size
+                vh.elementsLabel.text = if (nSubAlbums > 0) "$nSubAlbums sub-albums" else ""
 
-            vh.title.text = category.name
-            val nSubAlbums = category.getChildren().size
-            vh.elementsLabel.text = if (nSubAlbums > 0) "$nSubAlbums sub-albums" else ""
+                if (category.thumbnailUrl.isNotEmpty()) {
+                    Picasso.with(picker.context).load(category.thumbnailUrl).into(vh.icon)
+                } else {
+                    vh.icon.setImageDrawable(AppCompatResources.getDrawable(picker.context, R.drawable.image_icon))
+                }
 
-            if (category.getThumbnailUrl().isNotEmpty()) {
-                Picasso.with(picker.context).load(category.getThumbnailUrl()).into(vh.icon)
-            } else {
-                vh.icon.setImageDrawable(AppCompatResources.getDrawable(picker.context, R.drawable.image_icon))
-            }
+                vh.itemView.setBackgroundColor(picker.context.getColor(if(selectedCategory == catId) R.color.dark_blue else R.color.transparent))
 
-            vh.itemView.setBackgroundColor(picker.context.getColor(if(selectedCategory.id == category.id) R.color.dark_blue else R.color.transparent))
-
-            vh.mainLayout.setOnClickListener {
-                selectedCategory = category
-                refresh()
-            }
-
-            vh.openCatButton.visibility = if(category.getChildren().isNotEmpty()) View.VISIBLE else View.INVISIBLE
-            vh.openCatButton.setOnClickListener {
-                if(category.getChildren().isNotEmpty()) {
-                    currentCategory = category
-                    selectedCategory = category
+                vh.mainLayout.setOnClickListener {
+                    selectedCategory = catId
                     refresh()
+                }
+
+                vh.openCatButton.visibility = if(category.getChildren().isNotEmpty()) View.VISIBLE else View.INVISIBLE
+                vh.openCatButton.setOnClickListener {
+                    if(category.getChildren().isNotEmpty()) {
+                        currentCategory = catId
+                        selectedCategory = catId
+                        refresh()
+                    }
                 }
             }
         }
 
         override fun getItemCount(): Int {
-            return categories.size
+            return catIDs.size
         }
     }
 

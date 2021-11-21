@@ -3,10 +3,8 @@ package fr.curlyspiker.jpics
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
-import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
-import androidx.annotation.RequiresApi
 import androidx.work.Worker
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.Dispatchers
@@ -16,10 +14,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.lang.Exception
-import java.nio.file.Files
 import java.nio.file.Paths
-import java.nio.file.attribute.BasicFileAttributes
-import java.text.SimpleDateFormat
 import java.util.*
 
 class InstantUploadManager private constructor(val context: Context) {
@@ -34,7 +29,7 @@ class InstantUploadManager private constructor(val context: Context) {
         val foldersParamsString = sharedPref.getString("syncFoldersParams", "") ?: ""
         try {
             val foldersParamsJson = JSONObject(foldersParamsString)
-            val foldersArray = foldersParamsJson.optJSONArray("folders")
+            val foldersArray = foldersParamsJson.optJSONArray("folders") ?: JSONArray()
             for (i in 0 until foldersArray.length()) {
                 val foldersParams = foldersArray.optJSONObject(i)
                 val folderName = foldersParams.optString("name", "Unknown")
@@ -142,9 +137,9 @@ class InstantUploadManager private constructor(val context: Context) {
             val notUpdated = imageList.filter { p -> File(p).lastModified() > lastUpdate }
             notUpdated.sortedBy { p -> File(p).lastModified() }
 
-            val instantUploadCat = CategoriesManager.getInstantUploadCat()
+            val instantUploadCat = PiwigoData.getInstantUploadCat()
             instantUploadCat?.let {
-                fun uploadNext(index: Int) {
+                fun uploadNext(index: Int = 0) {
                     if(index >= notUpdated.size) {
                         return
                     }
@@ -160,21 +155,26 @@ class InstantUploadManager private constructor(val context: Context) {
                         val createdTime = file.lastModified()
                         val bmp = BitmapFactory.decodeFile(path)
 
-                        val imgData = PiwigoSession.ImageUploadData(bmp, filename, Date(createdTime))
-                        PiwigoSession.addImages(listOf(imgData), instantUploadCat, null) {
-                            Log.d("IU", "Just uploaded $path !")
-                            with (sharedPref.edit()) {
-                                putLong("last_update", createdTime)
-                                apply()
+                        val imgData = PiwigoAPI.ImageUploadData(bmp, filename, Date(createdTime))
+                        PiwigoData.addImages(listOf(imgData), listOf(instantUploadCat), listener = object : PiwigoData.ProgressListener{
+                            override fun onStarted() {}
+
+                            override fun onCompleted() {
+                                with (sharedPref.edit()) {
+                                    putLong("last_update", createdTime)
+                                    apply()
+                                }
+                                uploadNext(index + 1)
                             }
-                            CategoriesManager.refreshPictures(instantUploadCat.id) { }
-                            uploadNext(index + 1)
-                        }
+
+                            override fun onProgress(progress: Float) {}
+
+                        })
                     } else {
                         uploadNext(index + 1)
                     }
                 }
-                uploadNext(0)
+                uploadNext()
             }
         }
     }

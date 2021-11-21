@@ -4,7 +4,6 @@ import android.Manifest
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
@@ -16,7 +15,6 @@ import android.util.Log
 import android.widget.ImageButton
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.work.*
@@ -60,21 +58,19 @@ class MainActivity : BaseActivity() {
             allImagesFragment = AllImagesFragment()
             searchFragment = SearchFragment()
             if(PiwigoSession.logged) {
-                albumsFragment = ExplorerFragment(CategoriesManager.fromID(0))
+                albumsFragment = ExplorerFragment(0)
                 bottomView.selectedItemId = R.id.albums
             } else {
                 PiwigoSession.login("joss", "Cgyn76&cgyn76") {
-                    albumsFragment = ExplorerFragment(CategoriesManager.fromID(0))
+                    albumsFragment = ExplorerFragment(0)
                     bottomView.selectedItemId = R.id.albums
                 }
             }
         } else {
             allImagesFragment = (this.supportFragmentManager.findFragmentByTag("all_images") as AllImagesFragment?) ?: AllImagesFragment()
             searchFragment = (this.supportFragmentManager.findFragmentByTag("search") as SearchFragment?) ?: SearchFragment()
-            albumsFragment = (this.supportFragmentManager.findFragmentByTag("albums") as ExplorerFragment?) ?: ExplorerFragment(CategoriesManager.fromID(0))
+            albumsFragment = (this.supportFragmentManager.findFragmentByTag("albums") as ExplorerFragment?) ?: ExplorerFragment(0)
         }
-
-        CategoriesManager.refreshCategories {}
 
         val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
             if (isGranted) {
@@ -90,6 +86,8 @@ class MainActivity : BaseActivity() {
         else {
             requestPermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
+
+        PiwigoData.refreshEverything {  }
 
         when {
             intent?.action == Intent.ACTION_SEND -> {
@@ -110,6 +108,7 @@ class MainActivity : BaseActivity() {
     private fun handleSendImage(intent: Intent) {
         (intent.getParcelableExtra<Parcelable>(Intent.EXTRA_STREAM) as? Uri)?.let { uri ->
             Log.d("TAG", "Received images: $uri")
+            Log.d("TAG", "Received images, converted path: ${uri.path}")
 
             AlertDialog.Builder(this, R.style.AlertStyle)
                 .setTitle("Upload image")
@@ -137,17 +136,19 @@ class MainActivity : BaseActivity() {
                                 date = cursor.getString(dateIndex).toLong()
                             } catch (e: Exception) {}
 
-
                             val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                             filename = cursor.getString(nameIndex)
 
                             cursor.close()
                         }
 
-                        PiwigoSession.addImages(listOf(PiwigoSession.ImageUploadData(bitmap, filename, Date(date))), c, null) {
-                            CategoriesManager.refreshPictures(c.id)
-                            finish()
-                        }
+                        PiwigoData.addImages(listOf(PiwigoAPI.ImageUploadData(bitmap, filename, Date(date))), listOf(c), listener = object: PiwigoData.ProgressListener {
+                            override fun onStarted() {}
+                            override fun onProgress(progress: Float) {}
+                            override fun onCompleted() {
+                                finish()
+                            }
+                        })
                     }
                     dialog.show()
                 }
@@ -167,7 +168,7 @@ class MainActivity : BaseActivity() {
             .setPositiveButton("Yes") { _, _ ->
                 val dialog = CategoryPicker(this)
                 dialog.setOnCategorySelectedCallback { c ->
-                    val images = mutableListOf<PiwigoSession.ImageUploadData>()
+                    val images = mutableListOf<PiwigoAPI.ImageUploadData>()
                     intent.getParcelableArrayListExtra<Parcelable>(Intent.EXTRA_STREAM)?.let {
                         it.forEach { parcelable ->
                             val uri = parcelable as Uri
@@ -198,14 +199,17 @@ class MainActivity : BaseActivity() {
 
                                 cursor.close()
                             }
-                            images.add(PiwigoSession.ImageUploadData(bitmap, filename, Date(date)))
+                            images.add(PiwigoAPI.ImageUploadData(bitmap, filename, Date(date)))
                         }
                     }
 
-                    PiwigoSession.addImages(images, c, null) {
-                        CategoriesManager.refreshPictures(c.id)
-                        finish()
-                    }
+                    PiwigoData.addImages(images, listOf(c), listener = object : PiwigoData.ProgressListener {
+                        override fun onStarted() {}
+                        override fun onProgress(progress: Float) {}
+                        override fun onCompleted() {
+                            finish()
+                        }
+                    })
 
                 }
                 dialog.show()

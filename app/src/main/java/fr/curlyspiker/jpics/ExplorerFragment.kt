@@ -2,11 +2,11 @@ package fr.curlyspiker.jpics
 
 import android.app.AlertDialog
 import android.content.Context
-import android.content.DialogInterface
 import android.os.Bundle
 import android.text.InputType
 import android.text.TextUtils
 import android.util.AttributeSet
+import android.util.Log
 import android.view.*
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
@@ -18,13 +18,12 @@ import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.squareup.picasso.Picasso
 
-class ExplorerFragment (private var startCat: Category? = null) :
+class ExplorerFragment (private var startCat: Int? = null) :
     Fragment(),
-    CategoriesManagerListener, PiwigoSession.UploadImageListener {
+    PiwigoDataListener, PiwigoData.ProgressListener {
 
     private lateinit var mContext : Context
     private lateinit var swipeContainer: SwipeRefreshLayout
@@ -46,7 +45,7 @@ class ExplorerFragment (private var startCat: Category? = null) :
 
     private var imagesListFragment: ImageListFragment = ImageListFragment(startCat)
 
-    var currentCategory: Category = CategoriesManager.fromID(0)!!
+    var currentCategory: Int = 0
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_explorer, container, false)
@@ -76,10 +75,10 @@ class ExplorerFragment (private var startCat: Category? = null) :
         }
 
         albumEditConfirmButton.setOnClickListener {
-            PiwigoSession.updateCategory(currentCategory.id, albumTitleEdit.text.toString()) {
-                refreshCategories()
+            PiwigoData.setCategoryName(currentCategory, albumTitleEdit.text.toString()) {
                 requireActivity().runOnUiThread {
                     setAlbumTitleEditMode(false)
+                    updateViews()
                 }
             }
         }
@@ -94,8 +93,8 @@ class ExplorerFragment (private var startCat: Category? = null) :
                 if(albumTitleEditLayout.isVisible) {
                     setAlbumTitleEditMode(false)
                 } else {
-                    val parent = currentCategory.getParent()
-                    if (parent != null) {
+                    val parent = getCurrentCat()?.parentId
+                    if (PiwigoData.categories[parent] != null) {
                         changeCategory(parent)
                     } else {
                         activity?.moveTaskToBack(true)
@@ -105,7 +104,7 @@ class ExplorerFragment (private var startCat: Category? = null) :
         })
 
         if(savedInstanceState != null) {
-            startCat = CategoriesManager.fromID(savedInstanceState.getInt("cat_id"))
+            startCat = savedInstanceState.getInt("cat_id")
         }
 
         val fragmentManager = requireActivity().supportFragmentManager
@@ -113,7 +112,7 @@ class ExplorerFragment (private var startCat: Category? = null) :
         transaction.replace(R.id.image_list_fragment, imagesListFragment)
         transaction.commitAllowingStateLoss()
 
-        CategoriesManager.addListener(this)
+        PiwigoData.addListener(this)
         changeCategory(startCat)
 
         swipeContainer.setOnRefreshListener {
@@ -160,17 +159,22 @@ class ExplorerFragment (private var startCat: Category? = null) :
             override fun onSelectionChanged() {}
         }
 
-        refreshCategories()
+        onCategoriesReady()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        outState.putInt("cat_id", currentCategory.id)
+        outState.putInt("cat_id", currentCategory)
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
-        CategoriesManager.removeListener(this)
+        PiwigoData.removeListener(this)
+    }
+
+    private fun getCurrentCat() : Category?
+    {
+        return PiwigoData.categories[currentCategory]
     }
 
     private fun setAlbumTitleEditMode(editing: Boolean) {
@@ -193,57 +197,48 @@ class ExplorerFragment (private var startCat: Category? = null) :
         activity?.runOnUiThread {
             swipeContainer.isRefreshing = true
             swipeContainer.visibility = View.VISIBLE
-
-            CategoriesManager.refreshCategories {
-                activity?.runOnUiThread {
-                    currentCategory = CategoriesManager.fromID(currentCategory.id) ?: currentCategory
-                    swipeContainer.isRefreshing = false
-                    updateViews()
-                    categoriesAdapter?.refresh()
-                }
-            }
         }
+        PiwigoData.refreshCategories {}
     }
 
     private fun updateViews() {
-        albumTitle.text = currentCategory.name
-        albumTitleEdit.setText(currentCategory.name)
-        albumPathLayout.visibility = if(currentCategory.getParent() == null) View.GONE else View.VISIBLE
+        val cat = getCurrentCat()
+        cat?.let {
+            albumTitle.text = cat.name
+            albumTitleEdit.setText(cat.name)
+            albumPathLayout.visibility = if(PiwigoData.categories[cat.parentId] == null) View.GONE else View.VISIBLE
 
-        albumPathLayout.removeAllViews()
-        val parents = currentCategory.getHierarchy()
-        for(i in parents.indices) {
-            val p = parents[i]
-            val isLast = i == parents.size - 1
+            albumPathLayout.removeAllViews()
+            val parents = cat.getHierarchy()
+            for(i in parents.indices) {
+                val p = parents[i]
+                val isLast = i == parents.size - 1
 
-            val textView = TextView(mContext)
-            textView.setTextColor(ContextCompat.getColor(mContext, R.color.white))
-            textView.textSize = 15.0f
-            var txt = p.name
-            if(!isLast) {
-                textView.ellipsize = TextUtils.TruncateAt.END
-                txt += " > "
+                val textView = TextView(mContext)
+                textView.setTextColor(ContextCompat.getColor(mContext, R.color.white))
+                textView.textSize = 15.0f
+                var txt = PiwigoData.categories[p]?.name
+                if(!isLast) {
+                    textView.ellipsize = TextUtils.TruncateAt.END
+                    txt += " > "
+                }
+                textView.text = txt
+                textView.maxLines = 1
+                textView.setOnClickListener { changeCategory(p) }
+                albumPathLayout.addView(textView)
             }
-            textView.text = txt
-            textView.maxLines = 1
-            textView.setOnClickListener { changeCategory(p) }
-            albumPathLayout.addView(textView)
+
+            albumEditButton.visibility = if(currentCategory != 0) View.VISIBLE else View.GONE
         }
 
-        albumEditButton.visibility = if(currentCategory.id != 0) View.VISIBLE else View.GONE
     }
 
-    fun changeCategory(c : Category?) {
+    fun changeCategory(c : Int?) {
         c?.let {
             currentCategory = c
             imagesListFragment.setCategory(c)
-
-            categoriesAdapter?.refresh()
-
-            swipeContainer.visibility = if(swipeContainer.isRefreshing || c.getChildren().isNotEmpty()) View.VISIBLE else View.GONE
-
             setAlbumTitleEditMode(false)
-            updateViews()
+            onCategoriesReady()
         }
     }
 
@@ -255,11 +250,12 @@ class ExplorerFragment (private var startCat: Category? = null) :
         input.hint = "Name of new album"
         input.inputType = InputType.TYPE_CLASS_TEXT
         input.setTextColor(requireContext().getColor(R.color.white))
+        input.setHintTextColor(requireContext().getColor(R.color.light_gray))
         builder.setView(input)
 
         builder.setPositiveButton("OK") { dialog, _ ->
             val name = input.text.toString()
-            PiwigoSession.addCategory(name, currentCategory.getParent()?.id) {
+            PiwigoData.addCategory(name, getCurrentCat()?.id ) {
                 refreshCategories()
             }
             dialog.dismiss()
@@ -277,7 +273,7 @@ class ExplorerFragment (private var startCat: Category? = null) :
                 .setTitle("Delete categories")
                 .setMessage("Are you sure you want to delete these categories?")
                 .setIcon(android.R.drawable.ic_dialog_alert)
-                .setPositiveButton("Yes") { _, _ -> PiwigoSession.deleteCategories(selectedCategories, this) }
+                .setPositiveButton("Yes") { _, _ -> PiwigoData.deleteCategories(selectedCategories, this) }
                 .setNegativeButton("Cancel", null)
                 .show()
         }
@@ -290,20 +286,13 @@ class ExplorerFragment (private var startCat: Category? = null) :
             excludeList.add(currentCategory)
             selectCategory(excludeList) { c ->
                 c?.let {
-                    PiwigoSession.moveCategories(selectedCategories, c.id, this)
+                    PiwigoData.moveCategories(selectedCategories, c, this)
                 }
             }
         }
     }
 
-    private fun editSelectedCategory() {
-        val bottomSheetDialog = BottomSheetDialog(requireContext())
-        bottomSheetDialog.setContentView(R.layout.activity_login)
-
-        bottomSheetDialog.show()
-    }
-
-    private fun selectCategory(excludeList : List<Category> = listOf(), callback: (cat: Category?) -> Unit) {
+    private fun selectCategory(excludeList : List<Int> = listOf(), callback: (cat: Int?) -> Unit) {
 
         val dialog = CategoryPicker(requireContext())
         dialog.setOnCategorySelectedCallback(callback)
@@ -314,9 +303,11 @@ class ExplorerFragment (private var startCat: Category? = null) :
     override fun onImagesReady(catId: Int?) {}
 
     override fun onCategoriesReady() {
-        categoriesAdapter?.refresh()
         activity?.runOnUiThread {
-            swipeContainer.visibility = if(currentCategory.getChildren().isNotEmpty()) View.VISIBLE else View.GONE
+            swipeContainer.isRefreshing = false
+            updateViews()
+            categoriesAdapter?.refresh()
+            swipeContainer.visibility = if(swipeContainer.isRefreshing || getCurrentCat()?.getChildren()?.isNotEmpty() == true) View.VISIBLE else View.GONE
         }
     }
 
@@ -351,7 +342,7 @@ class ExplorerFragment (private var startCat: Category? = null) :
         var selecting: Boolean = false
         var selectionListener: SelectionListener? = null
 
-        class CategoryItem(val category: Category) {
+        class CategoryItem(val catId: Int) {
             var checked = false
         }
 
@@ -362,13 +353,15 @@ class ExplorerFragment (private var startCat: Category? = null) :
 
         fun refresh() {
             categories.clear()
-            fragment.currentCategory.getChildren().forEach { c -> categories.add(CategoryItem(c)) }
+            fragment.getCurrentCat()?.getChildren()?.forEach { c ->
+                categories.add(CategoryItem(c))
+            }
             updateOnUIThread()
         }
 
-        fun getSelectedCategories() : List<Category> {
-            val out = mutableListOf<Category>()
-            categories.filter { c -> c.checked }.forEach { out.add(it.category) }
+        fun getSelectedCategories() : List<Int> {
+            val out = mutableListOf<Int>()
+            categories.filter { c -> c.checked }.forEach { out.add(it.catId) }
             return out
         }
 
@@ -411,39 +404,40 @@ class ExplorerFragment (private var startCat: Category? = null) :
             if(position == categories.size) {
                 vh.title.text = fragment.requireContext().getString(R.string.new_album)
                 vh.elementsLabel.text = ""
-                vh.icon.setImageDrawable(AppCompatResources.getDrawable(fragment.requireContext(), R.drawable.add_big))
+                vh.icon.setImageDrawable(AppCompatResources.getDrawable(fragment.requireContext(), R.drawable.add))
                 vh.icon.setOnClickListener { fragment.addCategory() }
             } else {
                 val item = categories[position]
-                val category = item.category
+                val category = PiwigoData.categories[item.catId]
+                category?.let {
+                    val checkbox : CheckBox = vh.checkBox
 
-                val checkbox : CheckBox = vh.checkBox
+                    checkbox.visibility = if(selecting) View.VISIBLE else View.INVISIBLE
+                    checkbox.isChecked = item.checked
+                    checkbox.setOnClickListener { setItemChecked(position, !item.checked) }
 
-                checkbox.visibility = if(selecting) View.VISIBLE else View.INVISIBLE
-                checkbox.isChecked = item.checked
-                checkbox.setOnClickListener { setItemChecked(position, !item.checked) }
+                    vh.title.text = category.name
+                    val nSubAlbums = category.getChildren().size
+                    vh.elementsLabel.text = if (nSubAlbums > 0) "$nSubAlbums sub-albums" else ""
 
-                vh.title.text = category.name
-                val nSubAlbums = category.getChildren().size
-                vh.elementsLabel.text = if (nSubAlbums > 0) "$nSubAlbums sub-albums" else ""
-
-                if (category.getThumbnailUrl().isNotEmpty()) {
-                    Picasso.with(fragment.requireContext()).load(category.getThumbnailUrl()).into(vh.icon)
-                } else {
-                    vh.icon.setImageDrawable(AppCompatResources.getDrawable(fragment.requireContext(), R.drawable.image_icon))
-                }
-
-                vh.icon.setOnClickListener {
-                    if(!selecting) {
-                        fragment.changeCategory(category)
+                    if (category.thumbnailUrl.isNotEmpty()) {
+                        Picasso.with(fragment.requireContext()).load(category.thumbnailUrl).into(vh.icon)
                     } else {
-                        setItemChecked(position, !item.checked)
+                        vh.icon.setImageDrawable(AppCompatResources.getDrawable(fragment.requireContext(), R.drawable.image_icon))
                     }
-                }
 
-                vh.icon.setOnLongClickListener {
-                    setItemChecked(position, true)
-                    true
+                    vh.icon.setOnClickListener {
+                        if(!selecting) {
+                            fragment.changeCategory(item.catId)
+                        } else {
+                            setItemChecked(position, !item.checked)
+                        }
+                    }
+
+                    vh.icon.setOnLongClickListener {
+                        setItemChecked(position, true)
+                        true
+                    }
                 }
             }
         }

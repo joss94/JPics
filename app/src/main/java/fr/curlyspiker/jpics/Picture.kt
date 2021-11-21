@@ -5,10 +5,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.util.Log
+import android.widget.Toast
 import com.squareup.picasso.Picasso
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -20,32 +18,41 @@ import java.util.*
 class Picture (val id: Int, var name: String) {
 
     var thumbnailUrl: String = ""
-    var fullResUrl: String = ""
+    var largeResUrl: String = ""
+    var elementUrl: String = ""
 
-    var creationDate: Date
-    var creationDay: Date
+    var creationDate: Date = Date()
+        set(value) {
+            field = value
+            val cal = Calendar.getInstance()
+            cal.time = field
+            cal.set(Calendar.HOUR, 0)
+            cal.set(Calendar.MINUTE, 0)
+            cal.set(Calendar.SECOND, 0)
+            cal.set(Calendar.MILLISECOND, 0)
+            creationDay = cal.time
+        }
+
+    var creationDay: Date = Date()
 
     var isArchived = false
 
-    private var mInfo: JSONObject? = null
+    var mInfo: JSONObject? = null
 
     init {
         val cal = Calendar.getInstance()
-        cal.time = Date()
-        cal.set(Calendar.HOUR, 0)
-        cal.set(Calendar.MINUTE, 0)
-        cal.set(Calendar.SECOND, 0)
-        cal.set(Calendar.MILLISECOND, 0)
         creationDate = cal.time
-        creationDay = cal.time
+    }
+
+    fun isVideo() : Boolean {
+        return elementUrl.endsWith(".mp4")
     }
 
     fun saveToLocal(context: Context, path: String, callback: () -> Unit = {}) {
-        Log.d("Picture", "Downloading $name ($fullResUrl)")
         val target = object : com.squareup.picasso.Target {
             override fun onBitmapLoaded(bitmap: Bitmap, arg1: Picasso.LoadedFrom?) {
                 try {
-                    Log.d("Picture", "Downloaded $name ($fullResUrl)")
+                    Toast.makeText(context, "Downloaded of $name finished !", Toast.LENGTH_SHORT).show()
                     val folder = File(path)
                     if(!folder.exists()) { folder.mkdirs() }
                     val file = File(folder.path + File.separator + name + if(name.endsWith(".jpg")) "" else ".jpg")
@@ -65,27 +72,66 @@ class Picture (val id: Int, var name: String) {
             }
             override fun onPrepareLoad(placeHolderDrawable: Drawable?) {}
         }
-        Picasso.with(context).load(fullResUrl).into(target)
+        Picasso.with(context).load(elementUrl).into(target)
     }
 
-    fun getTags() : List<PiwigoSession.PicTag> {
-        val out = mutableListOf<PiwigoSession.PicTag>()
-        PiwigoSession.getAllTags().forEach { t ->
-            if(t.pictures.contains(id)) {
-                out.add(t)
+    fun getTags() : List<Int> {
+        val out = mutableListOf<Int>()
+        PiwigoData.picturesTags.filter{ pair -> pair.first == id}.forEach { pair -> out.add(pair.second) }
+        return out
+    }
+
+    fun getCategories(recursive: Boolean = false) : List<Int> {
+
+        fun addToList(out: MutableList<Int>, c: Int, recursive: Boolean) {
+            if(!out.contains(c)) {
+                out.add(c)
+
+                if(recursive) {
+                    val parents = PiwigoData.categories[c]?.getHierarchy()
+                    parents?.forEach { parent ->
+                        addToList(out, parent, recursive)
+                    }
+                }
             }
+        }
+
+        val out = mutableListOf<Int>()
+        PiwigoData.picturesCategories.filter { p -> p.first == id }.forEach { pair -> addToList(out, pair.second, recursive) }
+        return out
+    }
+
+    fun getCategoriesFromInfoJson() : List<Int> {
+        val out = mutableListOf<Int>()
+        val catsArray = mInfo?.optJSONArray("categories") ?: JSONArray()
+        for(i in 0 until catsArray.length()) {
+            out.add(catsArray.getJSONObject(i).optInt("id"))
         }
         return out
     }
 
     fun getInfo(forceRefresh: Boolean = false, cb: (info: JSONObject) -> Unit = {}) {
         if(mInfo == null || forceRefresh) {
-            PiwigoSession.getPictureInfo(id) { rsp ->
-                mInfo = rsp
-                cb(rsp)
+            PiwigoAPI.pwgImagesGetInfo(id) { success, rsp ->
+                if(success) {
+                    mInfo = rsp
+                }
+                cb(mInfo ?: JSONObject())
             }
         }
         else cb(mInfo ?: JSONObject())
+    }
+
+    fun getRepresentedBy() : List<Int> {
+        val out = mutableListOf<Int>()
+        Log.d("TAG", "Pic thumbnail url: $thumbnailUrl")
+        PiwigoData.categories.forEach{
+            if(it.value.thumbnailUrl == thumbnailUrl) {
+                out.add(it.key)
+                Log.d("TAG", "This pic was thumbnail to ${it.key}")
+            }
+        }
+        return out
     }
 
     companion object {
@@ -93,13 +139,14 @@ class Picture (val id: Int, var name: String) {
             val id = json.optInt("id")
             var name = json.optString("name", "null")
             if(name == "null") {
-                name = json.optString("file", "unkown")
+                name = json.optString("file", "unknown")
             }
 
             val p = Picture(id, name)
             val derivatives = json.optJSONObject("derivatives")
             p.thumbnailUrl = derivatives?.optJSONObject("thumb")?.optString("url")?:""
-            p.fullResUrl = derivatives?.optJSONObject("xxlarge")?.optString("url")?:""
+            p.largeResUrl = derivatives?.optJSONObject("xxlarge")?.optString("url")?:""
+            p.elementUrl = json.optString("element_url")
 
             val creationString = json.optString("date_creation", "")
             val format = SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
@@ -107,21 +154,8 @@ class Picture (val id: Int, var name: String) {
                 p.creationDate = format.parse(creationString) ?: Date()
             } catch (e: java.lang.Exception) {}
 
-            val cal = Calendar.getInstance()
-            cal.time = p.creationDate
-            cal.set(Calendar.HOUR, 0)
-            cal.set(Calendar.MINUTE, 0)
-            cal.set(Calendar.SECOND, 0)
-            p.creationDay = cal.time
-
-            val catsArray = json.optJSONArray("categories") ?: JSONArray()
-            for(i in 0 until catsArray.length()) {
-                val catId = catsArray.getJSONObject(i).optInt("id")
-                if(catId == CategoriesManager.getArchiveCat()?.id) {
-                    p.isArchived = true
-                    break
-                }
-            }
+            p.mInfo = json
+            p.isArchived = p.getCategoriesFromInfoJson().contains(PiwigoData.getArchiveCat())
 
             return p
         }

@@ -9,7 +9,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
-import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
@@ -27,7 +26,6 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import androidx.recyclerview.widget.SortedList
 import com.squareup.picasso.Picasso
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -38,22 +36,11 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.core.content.FileProvider
+import kotlinx.coroutines.GlobalScope
 import kotlin.collections.ArrayList
 
-
-class SpacesItemDecoration(private val space: Int, private val span: Int) : RecyclerView.ItemDecoration() {
-    override fun getItemOffsets(outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State) {
-        val position = parent.getChildLayoutPosition(view)
-        val column = position % span
-        outRect.left = if (column == 0) 0 else if (column == 1) space else space * 2
-        outRect.right = if (column == 2) 0 else if(column == 1) space else space * 2
-        outRect.top = if(position < span) 0 else if(parent.adapter?.itemCount ?:0 - position >= span) 2 * space else 0
-        outRect.bottom = if(parent.adapter?.itemCount ?:0 - position >= span) space else if(position < span) 2 * space else 0
-    }
-}
-
-class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
-    Fragment(), CategoriesManagerListener, PiwigoSession.UploadImageListener {
+class ImageListFragment (startCat: Int? = 0) :
+    Fragment(), PiwigoDataListener, PiwigoData.ProgressListener {
 
     private var actionMode : ActionMode? = null
 
@@ -79,7 +66,7 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
         }
     }
 
-    private var cat: Category? = null
+    private var catId: Int? = null
 
     private var pics = mutableListOf<Int>()
 
@@ -87,7 +74,7 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
     private var onFilterChanged : () -> Unit = {}
 
     init {
-        cat = startCat
+        catId = startCat
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
@@ -96,6 +83,12 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        imgReq = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                onImagesPicked(result.data)
+            }
+        }
 
         addButton = view.findViewById(R.id.add_image_button)
 
@@ -108,8 +101,13 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
         noImageView = view.findViewById(R.id.no_image_view)
 
         picturesAdapter = PicturesListAdapter(this)
-        picturesView.addItemDecoration(SpacesItemDecoration(2, 3))
-        picturesView.layoutManager = GridLayoutManager(requireContext(), 3)
+        val layoutManager = GridLayoutManager(requireContext(), 3)
+        picturesView.layoutManager = layoutManager
+        layoutManager.spanSizeLookup = object: GridLayoutManager.SpanSizeLookup() {
+            override fun getSpanSize(pos: Int) : Int {
+                return if(picturesAdapter?.isHeader(pos) == true) 3 else 1
+            }
+        }
         picturesView.adapter  = picturesAdapter
 
         val builder = FastScrollerBuilder(picturesView)
@@ -129,7 +127,7 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
                 actionMode = activity?.startActionMode(object: ActionMode.Callback {
                     override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
                         val menuInflater: MenuInflater? = activity?.menuInflater
-                        val menuRes = if(cat?.id == CategoriesManager.getArchiveCat()?.id) R.menu.explorer_menu_archive else R.menu.explorer_menu
+                        val menuRes = if(catId == PiwigoData.getArchiveCat()) R.menu.explorer_menu_archive else R.menu.explorer_menu
                         menuInflater?.inflate(menuRes, menu)
                         picturesAdapter?.selecting = true
                         addButton.visibility = View.INVISIBLE
@@ -149,7 +147,6 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
                                     R.id.action_delete -> deleteImages(selectedPics)
                                     R.id.action_delete_definitive -> deleteDefinitiveImages(selectedPics)
                                     R.id.action_restore -> restoreImages(selectedPics)
-                                    R.id.action_add_to_cat -> addImagesToCat(selectedPics)
                                     R.id.action_remove_from_album -> removeImagesFromAlbum(selectedPics)
                                     R.id.action_creation_date -> editImagesCreationDate(selectedPics)
                                     else -> {}
@@ -173,29 +170,23 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
 
         addButton.setOnClickListener { addImages() }
 
-        CategoriesManager.addListener(this)
+        PiwigoData.addListener(this)
 
         onFilterChanged = {
             lifecycleScope.launch(Dispatchers.IO) {
                 val filteredPics = getFilteredPics(filterQuery)
-                val newPicsItems = mutableListOf<PicturesListAdapter.PictureItem>()
-                filteredPics.forEach { id -> newPicsItems.add(PicturesListAdapter.PictureItem(id)) }
-
                 activity?.runOnUiThread {
-                    picturesAdapter?.replaceAll(newPicsItems)
+                    picturesAdapter?.replaceAll(filteredPics)
                 }
             }
         }
-        onFilterChanged()
-        onItemsChanged()
 
-        onImagesReady(cat?.id)
-        refreshPictures()
+        onImagesReady(catId)
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
-        CategoriesManager.removeListener(this)
+        PiwigoData.removeListener(this)
     }
 
     fun onItemsChanged() {
@@ -204,16 +195,16 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
         noImageView.visibility = if(hasItems) View.GONE else View.VISIBLE
     }
 
-    fun setCategory(c: Category?) {
-        cat = c
-        onImagesReady(cat?.id)
+    fun setCategory(c: Int?) {
+        catId = c
+        onImagesReady(catId)
     }
 
     private fun refreshPictures(callback : () -> Unit = {}) {
         InstantUploadManager.getInstance(requireContext()).checkForNewImages()
         activity?.runOnUiThread {
             refreshButton.isEnabled = false
-            CategoriesManager.refreshPictures(cat?.id) {
+            PiwigoData.refreshPictures(if(catId != null) listOf(catId!!) else null) { _, _ ->
                 activity?.runOnUiThread {
                     refreshButton.isEnabled = true
                 }
@@ -254,7 +245,7 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
 
             val progressListener = this
             lifecycleScope.launch {
-                val images = mutableListOf<PiwigoSession.ImageUploadData>()
+                val images = mutableListOf<PiwigoAPI.ImageUploadData>()
                 uris.forEach { uri ->
                     val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                         val source = ImageDecoder.createSource(requireContext().contentResolver, uri)
@@ -280,10 +271,10 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
                     }
 
 
-                    images.add(PiwigoSession.ImageUploadData(bitmap, filename, Date(date)))
+                    images.add(PiwigoAPI.ImageUploadData(bitmap, filename, Date(date)))
                 }
 
-                PiwigoSession.addImages(images, c, progressListener)
+                PiwigoData.addImages(images, listOf(c), listener = progressListener)
             }
         }
     }
@@ -297,11 +288,9 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
     }
 
     override fun onCompleted() {
-        refreshPictures {
-            activity?.runOnUiThread {
-                progressLayout.visibility = View.GONE
-                actionMode?.finish()
-            }
+        activity?.runOnUiThread {
+            progressLayout.visibility = View.GONE
+            actionMode?.finish()
         }
     }
 
@@ -320,7 +309,7 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
             onStarted()
             var downloaded = 0
             pictures.forEach { pic ->
-                CategoriesManager.pictures.getValue(pic).saveToLocal(requireContext(), path) {
+                PiwigoData.pictures.getValue(pic).saveToLocal(requireContext(), path) {
                     downloaded += 1
                     onProgress(downloaded.toFloat() / pics.size)
                 }
@@ -350,14 +339,25 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
             .setTitle("What do you want to do ?")
             .setCancelable(true)
             .setPositiveButton("OK") { _, _ ->
-                val excludeList = mutableListOf<Category>()
-                cat?.let { excludeList.add(it) }
+                val excludeList = mutableListOf<Int>()
+                catId?.let { excludeList.add(it) }
                 selectCategory(excludeList) { c ->
-                    PiwigoSession.movePictures(pictures, checkedItem == 0, c) {
-                        refreshPictures()
-                        CategoriesManager.refreshPictures(c.id)
-                        activity?.runOnUiThread{ actionMode?.finish() }
+                    if(checkedItem == 0) {
+                        PiwigoData.addPicsToCat(pictures, c) {
+                            activity?.runOnUiThread {
+                                refreshPictures()
+                                actionMode?.finish()
+                            }
+                        }
+                    } else {
+                        PiwigoData.movePicsToCat(pictures, c) {
+                            activity?.runOnUiThread {
+                                refreshPictures()
+                                actionMode?.finish()
+                            }
+                        }
                     }
+
                 }
             }
 
@@ -365,23 +365,8 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
     }
 
     private fun removeImagesFromAlbum(pictures: List<Int>) {
-        val removablePictures = pictures.filter { id -> CategoriesManager.getCategoriesOf(id).size > 1 }
-        if(removablePictures.size != pictures.size) {
-            Toast.makeText(requireContext(), "Some pictures could not be removed because they only belong to this album", Toast.LENGTH_LONG).show()
-        }
-
-        cat?.let { c ->
-            PiwigoSession.removePicturesFromAlbum(removablePictures, c.id) {
-                refreshPictures()
-                activity?.runOnUiThread{ actionMode?.finish() }
-            }
-        }
-
-    }
-
-    private fun addImagesToCat(pictures: List<Int>) {
-        selectCategory { c ->
-            PiwigoSession.movePictures(pictures, true, c, this) {
+        catId?.let { c ->
+            PiwigoData.removePicsFromCat(pictures, c) {
                 refreshPictures()
                 activity?.runOnUiThread{ actionMode?.finish() }
             }
@@ -393,7 +378,7 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
             .setTitle("Delete images")
             .setMessage("Are you sure you want to delete these images? You will be able to restore them from the archive")
             .setIcon(android.R.drawable.ic_dialog_alert)
-            .setPositiveButton("Yes") { _, _ -> PiwigoSession.archivePictures(pictures, this) }
+            .setPositiveButton("Yes") { _, _ -> PiwigoData.archivePictures(pictures, this) }
             .setNegativeButton("Cancel", null).show()
     }
 
@@ -402,7 +387,13 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
             .setTitle("Delete images")
             .setMessage("Are you sure you want to delete these images? This will be definitive !")
             .setIcon(android.R.drawable.ic_dialog_alert)
-            .setPositiveButton("Yes") { _, _ -> PiwigoSession.deletePictures(pictures, this) }
+            .setPositiveButton("Yes") { _, _ ->
+                PiwigoData.deleteImages(pictures) {
+                    activity?.runOnUiThread {
+                        actionMode?.finish()
+                    }
+                }
+            }
             .setNegativeButton("Cancel", null).show()
     }
 
@@ -411,7 +402,7 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
             .setTitle("Restore images")
             .setMessage("Are you sure you want to restore these images?")
             .setIcon(android.R.drawable.ic_dialog_alert)
-            .setPositiveButton("Yes") { _, _ -> PiwigoSession.restorePictures(pictures, this) }
+            .setPositiveButton("Yes") { _, _ -> PiwigoData.restorePictures(pictures, this) }
             .setNegativeButton("Cancel", null).show()
     }
 
@@ -462,7 +453,7 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
                 }
                 override fun onPrepareLoad(placeHolderDrawable: Drawable?) {}
             }
-            Picasso.with(requireContext()).load(CategoriesManager.pictures.getValue(p).fullResUrl).into(target)
+            Picasso.with(requireContext()).load(PiwigoData.pictures.getValue(p).largeResUrl).into(target)
         }
     }
 
@@ -474,11 +465,11 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
                 return
             }
             onProgress(index.toFloat() / pictures.size)
-            PiwigoSession.setPictureInfo(pictures[index], creationDate = creationDate)  {
+            PiwigoData.setPicCreationDate(pictures[index], creationDate = Date(creationDate))  {
                 setPictureCreationDate(index + 1, creationDate)
             }
         }
-        Utils.getDatetime(parentFragmentManager, CategoriesManager.pictures.getValue(pictures[0]).creationDate) {
+        Utils.getDatetime(parentFragmentManager, PiwigoData.pictures.getValue(pictures[0]).creationDate) {
             onStarted()
             setPictureCreationDate(0, it)
         }
@@ -486,7 +477,7 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
         actionMode?.finish()
     }
 
-    private fun selectCategory(excludeList : List<Category> = listOf(), callback: (cat: Category) -> Unit) {
+    private fun selectCategory(excludeList : List<Int> = listOf(), callback: (cat: Int) -> Unit) {
         val dialog = CategoryPicker(requireContext())
         dialog.setOnCategorySelectedCallback(callback)
         dialog.excludeCategories(excludeList)
@@ -502,21 +493,21 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
         if(query.isEmpty()) { return pics }
 
         val queryLow = query.lowercase()
-        val filteredTags = PiwigoSession.getAllTags().filter { t -> t.name.lowercase().contains(queryLow) }
-        val filteredCats = CategoriesManager.categories.filter { c -> c.name.lowercase().contains(queryLow) }
+        val filteredTags = PiwigoData.tags.filter { t -> t.value.name.lowercase().contains(queryLow) }.keys
+        val filteredCats = PiwigoData.categories.filter { c -> c.value.name.lowercase().contains(queryLow) }.keys
 
         return pics.filter { id ->
-            val pic = CategoriesManager.pictures.getValue(id)
+            val pic = PiwigoData.pictures.getValue(id)
             pic.name.lowercase().contains(queryLow) || filteredTags.intersect(pic.getTags()).isNotEmpty() ||
-                CategoriesManager.getCategoriesOf(id, recursive = true).intersect(filteredCats).isNotEmpty()
+                pic.getCategories(recursive = true).intersect(filteredCats).isNotEmpty()
 
         }
     }
 
     override fun onImagesReady(catId: Int?) {
-        val currentCategory = cat
-        if(catId == currentCategory?.id) {
-            pics = CategoriesManager.getPictures(cat?.id).toMutableList()
+        if(this.catId == null || this.catId == catId || catId == null) {
+            pics.clear()
+            PiwigoData.picturesCategories.filter { e -> e.second == this.catId || (this.catId == null && e.second != PiwigoData.getArchiveCat()) }.forEach { pics.add(it.first) }
             onFilterChanged()
         }
     }
@@ -524,16 +515,31 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
     override fun onCategoriesReady() {}
 
     class PicturesListAdapter(private val fragment: ImageListFragment) :
-        RecyclerView.Adapter<PicturesListAdapter.ViewHolder>(),
+        RecyclerView.Adapter<RecyclerView.ViewHolder>(),
         SectionIndexer,
         PopupTextProvider {
 
-        class PictureItem(val id: Int) {
-            var checked = false
-            fun picture() : Picture {
-                return CategoriesManager.pictures.getValue(id)
+        private val ITEM_VIEW_TYPE_HEADER = -1
+        private val ITEM_VIEW_TYPE_ITEM = -2
+
+        sealed class DataItem {
+            data class PictureItem(val picId: Int) : DataItem() {
+                override val id = picId.toLong()
+                override val creationDate = picture()?.creationDay ?: Date()
+                var checked = false
+                fun picture() : Picture? {
+                    return PiwigoData.pictures[id.toInt()]
+                }
             }
+
+            data class Header(override val creationDate: Date): DataItem() {
+                override val id = creationDate.hashCode().toLong()
+            }
+
+            abstract val id: Long
+            abstract val creationDate: Date
         }
+
 
         abstract class SelectionListener {
             abstract fun onSelectionEnabled()
@@ -546,89 +552,66 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
 
         private var sections: MutableList<Date> = mutableListOf()
 
+        private var items = listOf<DataItem>()
 
-        val picsComparator = Comparator<PictureItem> { p0, p1 -> p1.picture().creationDate.compareTo(p0.picture().creationDate)}
-            .thenBy { p -> p.picture().name }
-            .thenBy { p -> p.id }
-
-        private var sortedPictures = SortedList(PictureItem::class.java, object : SortedList.Callback<PictureItem>() {
-
-            override fun onInserted(position: Int, count: Int) {
-                notifyItemRangeInserted(position, count)
-                fragment.onItemsChanged()
-            }
-
-            override fun onRemoved(position: Int, count: Int) {
-                notifyItemRangeRemoved(position, count)
-                fragment.onItemsChanged()
-            }
-
-            override fun onMoved(fromPosition: Int, toPosition: Int) {
-                notifyItemMoved(fromPosition, toPosition)
-                fragment.onItemsChanged()
-            }
-
-            override fun onChanged(position: Int, count: Int) {
-                notifyItemRangeChanged(position, count)
-                fragment.onItemsChanged()
-            }
-
-            override fun compare(o1: PictureItem?, o2: PictureItem?): Int {
-                return picsComparator.compare(o1, o2)
-            }
-
-            override fun areContentsTheSame(oldItem: PictureItem?, newItem: PictureItem?): Boolean {
-                return oldItem?.equals(newItem) ?: false
-            }
-
-            override fun areItemsTheSame(item1: PictureItem?, item2: PictureItem?): Boolean {
-                return item1?.id == item2?.id
-            }
-        })
+        fun isHeader(pos: Int) : Boolean {
+            return items[pos] is DataItem.Header
+        }
 
         private fun showImageFullscreen(position: Int) {
-            CategoriesManager.currentlyDisplayedList.clear()
-            for(i in 0 until sortedPictures.size()) {
-                CategoriesManager.currentlyDisplayedList.add(sortedPictures[i].id)
+            PiwigoData.currentlyDisplayedList.clear()
+            items.forEach { i ->
+                if(i is DataItem.PictureItem) {
+                    PiwigoData.currentlyDisplayedList.add(i.picId)
+                }
             }
 
             val intent = Intent(mContext,ImageViewerActivity::class.java)
-            intent.putExtra("img_index", position)
+            intent.putExtra("img_id", items[position].id.toInt())
             ContextCompat.startActivity(mContext, intent, null)
         }
 
         fun getSelectedPictures() : List<Int> {
-            val selectedPictures : MutableList<Int> = mutableListOf()
-            for(i in 0 until sortedPictures.size()) {
-                val p = sortedPictures[i]
-                if(p.checked) { selectedPictures.add(p.id) }
-            }
+            val selectedPictures = mutableListOf<Int>()
+            items.filter { i -> i is DataItem.PictureItem && i.checked }.forEach { selectedPictures.add((it as DataItem.PictureItem).picId) }
             return selectedPictures
         }
 
-        fun replaceAll(models: List<PictureItem?>) {
-            sortedPictures.beginBatchedUpdates()
-            for (i in sortedPictures.size() - 1 downTo 0) {
-                val model = sortedPictures.get(i)
-                if (!models.contains(model)) {
-                    sortedPictures.remove(model)
+        fun replaceAll(models: List<Int>) {
+
+            val picsList = mutableListOf<Picture>()
+            models.forEach { m -> picsList.add(PiwigoData.pictures.getValue(m)) }
+
+            picsList.sortWith(compareByDescending<Picture>{ it.creationDate }.thenBy{ it.name }.thenBy{ it.id })
+            GlobalScope.launch(Dispatchers.IO) {
+                val groupedList = picsList.groupBy { p ->
+                    p.creationDay
+                }
+                val newItems = ArrayList<DataItem>()
+
+                for(i in groupedList.keys){
+                    newItems.add(DataItem.Header(i))
+                    for(v in groupedList.getValue(i)){
+                        newItems.add(DataItem.PictureItem(v.id))
+                    }
+                }
+
+                newItems.forEach { newItem ->
+                    val existing = items.firstOrNull { it is DataItem.PictureItem && it.id == newItem.id }
+                    if(existing != null) {
+                        (newItem as DataItem.PictureItem).checked = (existing as DataItem.PictureItem).checked
+                    }
+                }
+                GlobalScope.launch(Dispatchers.Main) {
+                    items = newItems
+                    updateSections()
+                    fragment.onItemsChanged()
+                    notifyDataSetChanged()
                 }
             }
-            sortedPictures.addAll(models)
-            updateSections()
-            sortedPictures.endBatchedUpdates()
         }
 
-        private fun updateSections() {
-            sections.clear()
-            for(i in 0 until sortedPictures.size()) {
-                val date = sortedPictures[i].picture().creationDate
-                if(!sections.contains(date)) {
-                    sections.add(date)
-                }
-            }
-        }
-
+        @SuppressLint("NotifyDataSetChanged")
         private fun setItemChecked(index: Int, checked: Boolean) {
             if(checked) {
                 if(!selecting) {
@@ -636,15 +619,18 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
                     selectionListener?.onSelectionEnabled()
                 }
             }
-            sortedPictures[index].checked = checked
-            notifyItemChanged(index)
+            (items[index] as DataItem.PictureItem).checked = checked
+            fragment.actionMode?.title = getSelectedPictures().size.toString()
+            notifyDataSetChanged()
         }
 
         @SuppressLint("NotifyDataSetChanged")
         fun exitSelectionMode() {
             selecting = false
-            for(i in 0 until sortedPictures.size()) {
-                sortedPictures[i].checked = false
+            for(i in items) {
+                if (i is DataItem.PictureItem) {
+                    i.checked = false
+                }
             }
             notifyDataSetChanged()
         }
@@ -652,18 +638,111 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
         @SuppressLint("NotifyDataSetChanged")
         fun selectAll() {
             selecting = true
-            for(i in 0 until sortedPictures.size()) {
-                sortedPictures[i].checked = true
+            for(i in items) {
+                if (i is DataItem.PictureItem) {
+                    i.checked = true
+                }
             }
             notifyDataSetChanged()
         }
 
         // stores and recycles views as they are scrolled off screen
-        class ViewHolder internal constructor(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        class PicViewHolder internal constructor(itemView: View) : RecyclerView.ViewHolder(itemView) {
             var icon: ImageView = itemView.findViewById(R.id.image_tile_image)
             var checkBox: CheckBox = itemView.findViewById(R.id.image_tile_checkbox)
             var wideButton: ImageButton = itemView.findViewById(R.id.image_tile_wide)
             var tile: CardView = itemView.findViewById(R.id.cardview)
+        }
+
+        class TextViewHolder internal constructor(itemView: View) : RecyclerView.ViewHolder(itemView) {
+            var label: TextView = itemView.findViewById(R.id.section_title)
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+            return when (viewType) {
+                ITEM_VIEW_TYPE_HEADER -> {
+                    val view: View =  LayoutInflater.from(fragment.requireContext()).inflate(R.layout.section_tile, parent, false)
+                    TextViewHolder(view)
+                }
+                ITEM_VIEW_TYPE_ITEM -> {
+                    val view: View =  LayoutInflater.from(fragment.requireContext()).inflate(R.layout.image_tile, parent, false)
+                    PicViewHolder(view)
+                }
+                else -> throw ClassCastException("Unknown viewType ${viewType}")
+            }
+        }
+
+        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, p0: Int) {
+
+            when (holder) {
+                is PicViewHolder -> {
+                    val p = items[p0] as DataItem.PictureItem
+                    Picasso.with(mContext).load(p.picture()?.thumbnailUrl).into(holder.icon)
+
+                    val tile = holder.tile
+                    val icon = holder.icon
+                    val checkbox = holder.checkBox
+                    val wideButton = holder.wideButton
+
+                    checkbox.visibility = if(selecting) View.VISIBLE else View.INVISIBLE
+                    checkbox.isChecked = p.checked
+                    checkbox.setOnClickListener { setItemChecked(p0, !p.checked) }
+
+                    tile.radius = if(p.checked) 20.0f else 0.0f
+                    val tileLayoutParams = tile.layoutParams as RelativeLayout.LayoutParams
+                    val margin = if(p.checked) 40 else 0
+                    tileLayoutParams.setMargins(margin, margin, margin, margin)
+                    tile.layoutParams = tileLayoutParams
+
+                    wideButton.visibility = if(selecting) View.VISIBLE else View.INVISIBLE
+                    wideButton.setOnClickListener {
+                        showImageFullscreen(p0)
+                    }
+
+                    (holder.itemView.layoutParams as GridLayoutManager.LayoutParams).rightMargin = 5
+                    (holder.itemView.layoutParams as GridLayoutManager.LayoutParams).topMargin = 5
+
+                    icon.setOnClickListener {
+                        if(selecting) {
+                            setItemChecked(p0, !p.checked)
+                        } else {
+                            showImageFullscreen(p0)
+                        }
+                    }
+
+                    icon.setOnLongClickListener {
+                        setItemChecked(p0, true)
+                        true
+                    }
+                }
+                is TextViewHolder -> {
+                    val headerItem = items[p0] as DataItem.Header
+                    holder.label.text = SimpleDateFormat("EEE. d MMM. yyyy", Locale.US).format(headerItem.creationDate)
+                }
+            }
+        }
+
+        override fun getItemCount(): Int {
+            return items.size
+        }
+
+        override fun getItemId(position: Int): Long {
+            return items[position].id
+        }
+
+        override fun getItemViewType(position: Int): Int {
+            return when (items[position]) {
+                is DataItem.Header -> ITEM_VIEW_TYPE_HEADER
+                is DataItem.PictureItem -> ITEM_VIEW_TYPE_ITEM
+            }
+        }
+
+
+        private fun updateSections() {
+            sections.clear()
+            for(i in items.filterIsInstance<DataItem.Header>()) {
+                sections.add(i.creationDate)
+            }
         }
 
         override fun getSections(): Array<Any> {
@@ -673,8 +752,9 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
         override fun getPositionForSection(p0: Int): Int {
             val section = sections[p0]
             var index = -1
-            for(i in 0 until sortedPictures.size()) {
-                if(section >= sortedPictures[i].picture().creationDay) {
+            for(i in items.indices) {
+                val item = items[i]
+                if(section >= item.creationDate) {
                     index = i
                     break
                 }
@@ -684,68 +764,13 @@ class ImageListFragment (startCat: Category? = CategoriesManager.fromID(0)) :
 
         override fun getSectionForPosition(p0: Int): Int {
             val sections = sections
-            val picDate = sortedPictures[p0].picture().creationDay
+            val picDate = (items[p0] as DataItem.PictureItem).picture()?.creationDay
             return sections.indexOfFirst { s -> s <= picDate }
         }
 
         override fun getPopupText(position: Int): String {
-            val simpleDate = SimpleDateFormat("dd MMMM yyyy", Locale.US)
-            return simpleDate.format(sortedPictures[position].picture().creationDate)
-        }
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-            val view: View = LayoutInflater.from(fragment.requireContext()).inflate(R.layout.image_tile, parent, false)
-            return ViewHolder(view)
-        }
-
-        override fun onBindViewHolder(holder: ViewHolder, p0: Int) {
-            val p = sortedPictures[p0]
-            Picasso.with(mContext).load(p.picture().thumbnailUrl).into(holder.icon)
-
-            val tile = holder.tile
-            val icon = holder.icon
-            val checkbox = holder.checkBox
-            val wideButton = holder.wideButton
-
-            checkbox.visibility = if(selecting) View.VISIBLE else View.INVISIBLE
-            checkbox.isChecked = p.checked
-            checkbox.setOnClickListener { setItemChecked(p0, !p.checked) }
-
-            tile.radius = if(p.checked) 20.0f else 0.0f
-            val tileLayoutParams = tile.layoutParams as RelativeLayout.LayoutParams
-            val margin = if(p.checked) 40 else 0
-            tileLayoutParams.setMargins(margin, margin, margin, margin)
-            //tile.layoutParams = tileLayoutParams
-
-            wideButton.visibility = if(selecting) View.VISIBLE else View.INVISIBLE
-            wideButton.setOnClickListener {
-                showImageFullscreen(p0)
-            }
-
-            icon.setOnClickListener {
-                if(selecting) {
-                    setItemChecked(p0, !p.checked)
-                } else {
-                    showImageFullscreen(p0)
-                }
-            }
-
-            icon.setOnLongClickListener {
-                setItemChecked(p0, true)
-                true
-            }
-        }
-
-        override fun getItemCount(): Int {
-            return sortedPictures.size()
-        }
-
-        override fun getItemId(position: Int): Long {
-            return sortedPictures[position].picture().id.toLong()
-        }
-
-        override fun getItemViewType(position: Int): Int {
-            return position
+            val simpleDate = SimpleDateFormat("EEE. d MMM. yyyy", Locale.US)
+            return simpleDate.format(items[position].creationDate)
         }
     }
 

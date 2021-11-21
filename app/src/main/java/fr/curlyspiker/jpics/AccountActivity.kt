@@ -20,7 +20,7 @@ class AccountActivity : AppCompatActivity() {
         usernameText = findViewById(R.id.user)
         logoutButton = findViewById(R.id.logout_button)
 
-        usernameText.text = PiwigoSession.username
+        usernameText.text = PiwigoSession.user.username
 
         logoutButton.setOnClickListener {
             logout()
@@ -38,14 +38,6 @@ class AccountActivity : AppCompatActivity() {
     }
 
     private fun logout() {
-        PiwigoSession.logout {
-            val prefs = getSharedPreferences("fr.curlyspiker.jpics", Context.MODE_PRIVATE)
-            prefs.edit().remove("username").apply()
-            prefs.edit().remove("password").apply()
-
-            val intent = Intent(this, LoginActivity::class.java)
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            ContextCompat.startActivity(this, intent, null)
-        }
+        PiwigoSession.logout(this)
     }
 }

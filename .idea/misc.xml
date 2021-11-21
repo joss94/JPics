@@ -22,6 +22,7 @@
         <entry key="app/src/main/res/layout/activity_login.xml" value="0.19895833333333332" />
         <entry key="app/src/main/res/layout/activity_main.xml" value="0.16666666666666666" />
         <entry key="app/src/main/res/layout/activity_sync.xml" value="0.22" />
+        <entry key="app/src/main/res/layout/activity_video_viewer.xml" value="0.2293859649122807" />
         <entry key="app/src/main/res/layout/category_row.xml" value="0.2641843971631206" />
         <entry key="app/src/main/res/layout/category_tile.xml" value="0.2641843971631206" />
         <entry key="app/src/main/res/layout/date_time_picker.xml" value="0.22447916666666667" />
@@ -33,6 +34,8 @@
         <entry key="app/src/main/res/layout/fragment_image_list.xml" value="0.28894927536231885" />
         <entry key="app/src/main/res/layout/image_tile.xml" value="0.2916666666666667" />
         <entry key="app/src/main/res/layout/image_viewer_page.xml" value="0.19429347826086957" />
+        <entry key="app/src/main/res/layout/image_viewer_page_video.xml" value="0.2293859649122807" />
+        <entry key="app/src/main/res/layout/section_tile.xml" value="0.1" />
         <entry key="app/src/main/res/layout/syncFolderRow.xml" value="0.5432291666666667" />
         <entry key="app/src/main/res/layout/sync_folder_row.xml" value="0.19375" />
         <entry key="app/src/main/res/layout/tagTile.xml" value="0.2796875" />

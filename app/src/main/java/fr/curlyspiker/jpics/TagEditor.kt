@@ -6,7 +6,6 @@ import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.InsetDrawable
 import android.os.Bundle
-import android.util.Log
 import androidx.recyclerview.widget.RecyclerView
 
 import android.view.*
@@ -18,13 +17,13 @@ import android.widget.ArrayAdapter
 
 
 
-class TagEditor(context: Context, val callback: (List<PiwigoSession.PicTag>) -> Unit) : Dialog(context, R.style.AlertStyle) {
+class TagEditor(context: Context, val callback: (List<PicTag>) -> Unit) : Dialog(context, R.style.AlertStyle) {
 
     private lateinit var tagsView: RecyclerView
     private lateinit var tagsAdapter: TagsAdapter
     private lateinit var tagTextView: AutoCompleteTextView
 
-    private var tags = mutableListOf<PiwigoSession.PicTag>()
+    private var tags = mutableListOf<PicTag>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,13 +47,13 @@ class TagEditor(context: Context, val callback: (List<PiwigoSession.PicTag>) -> 
 
         tagTextView = findViewById(R.id.tag_text_view)
         val tagsNames = mutableListOf<String>()
-        PiwigoSession.getAllTags().forEach { t -> tagsNames.add(t.name) }
+        PiwigoData.tags.values.forEach { t -> tagsNames.add(t.name) }
         val adapter: ArrayAdapter<String> = ArrayAdapter<String>(context, android.R.layout.simple_dropdown_item_1line, tagsNames)
         tagTextView.setAdapter(adapter)
         findViewById<Button>(R.id.tag_edit_text_ok_button).setOnClickListener {
             val tagName = tagTextView.text.toString()
             if(tags.firstOrNull { t -> t.name == tagName } == null) {
-                tags.add(PiwigoSession.PicTag(PiwigoSession.getTagFromString(tagName)?.id ?: -1, tagName))
+                tags.add(PicTag(PiwigoData.tags.values.firstOrNull { it.name == tagName }?.id ?: -1, tagName))
                 tagsAdapter.setTags(tags)
             }
             tagTextView.setText("")
@@ -71,8 +70,8 @@ class TagEditor(context: Context, val callback: (List<PiwigoSession.PicTag>) -> 
         tagsAdapter.setTags(tags)
     }
 
-    fun setTags(t: List<PiwigoSession.PicTag>) {
-        tags = t.toMutableList()
+    fun setTags(t: List<Int>) {
+        tags = PiwigoData.tags.values.filter { t.contains(it.id) }.toMutableList()
         if(this::tagsAdapter.isInitialized) {
             tagsAdapter.setTags(tags)
         }
@@ -81,14 +80,14 @@ class TagEditor(context: Context, val callback: (List<PiwigoSession.PicTag>) -> 
     class TagsAdapter(private val picker: TagEditor) :
         RecyclerView.Adapter<TagsAdapter.ViewHolder>(){
 
-        private var tags = mutableListOf<PiwigoSession.PicTag>()
+        private var tags = mutableListOf<PicTag>()
 
-        fun setTags(t: List<PiwigoSession.PicTag>) {
+        fun setTags(t: List<PicTag>) {
             tags = t.toMutableList()
             notifyDataSetChanged()
         }
 
-        fun getTags() : List<PiwigoSession.PicTag> {
+        fun getTags() : List<PicTag> {
             return tags
         }
 

@@ -3,12 +3,16 @@ package fr.curlyspiker.jpics
 import android.app.DatePickerDialog
 import android.app.Dialog
 import android.app.TimePickerDialog
+import android.graphics.Bitmap
 import android.os.Bundle
 import android.text.format.DateFormat
 import android.widget.DatePicker
 import android.widget.TimePicker
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.FragmentManager
+import java.io.ByteArrayOutputStream
+import java.math.BigInteger
+import java.security.MessageDigest
 import java.util.*
 
 object Utils {
@@ -53,5 +57,15 @@ object Utils {
         }
 
         DatePickerFragment().show(supportFragmentManager, "datePicker")
+    }
+
+    fun imgToByteArray(img: Bitmap): ByteArray {
+        val byteArrayOutputStream = ByteArrayOutputStream()
+        img.compress(Bitmap.CompressFormat.JPEG, 100, byteArrayOutputStream)
+        return byteArrayOutputStream.toByteArray()
+    }
+
+    fun md5(input:ByteArray): String {
+        return BigInteger(1, MessageDigest.getInstance("MD5").digest(input)).toString(16).padStart(32, '0')
     }
 }

@@ -20,8 +20,13 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.view.isVisible
 import androidx.viewpager.widget.PagerAdapter
 import androidx.viewpager.widget.ViewPager
+import com.google.android.exoplayer2.ExoPlayer
+import com.google.android.exoplayer2.MediaItem
+import com.google.android.exoplayer2.Player
+import com.google.android.exoplayer2.ui.StyledPlayerView
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.squareup.picasso.Picasso
 import java.io.File
@@ -59,11 +64,11 @@ class ImageViewerActivity : AppCompatActivity() {
         pager = findViewById(R.id.pager)
 
         catId = savedInstanceState?.getInt("cat_id") ?: intent.getIntExtra("cat_id", -1)
-        val index = savedInstanceState?.getInt("img_index") ?: intent.getIntExtra("img_index", 0)
+        currentPicId = savedInstanceState?.getInt("img_id") ?: intent.getIntExtra("img_id", 0)
 
-        pagerAdapter = ImageViewerPager(applicationContext)
+        pagerAdapter = ImageViewerPager(this, this)
         pager.adapter = pagerAdapter
-        pagerAdapter.pictures = CategoriesManager.currentlyDisplayedList.toList()
+        pagerAdapter.pictures = PiwigoData.currentlyDisplayedList.toList()
 
         pager.addOnPageChangeListener(object: ViewPager.OnPageChangeListener {
             override fun onPageScrolled(position: Int, positionOffset: Float, positionOffsetPixels: Int) {}
@@ -96,7 +101,7 @@ class ImageViewerActivity : AppCompatActivity() {
 
             builder.setPositiveButton("OK") { dialog, _ ->
                 val name = input.text.toString()
-                PiwigoSession.setPictureInfo(currentPicId, name = name) {
+                PiwigoData.setPicName(currentPicId, name) {
                     updateBottomSheet()
                 }
                 dialog.dismiss()
@@ -108,8 +113,8 @@ class ImageViewerActivity : AppCompatActivity() {
         }
 
         infoDialog.findViewById<ImageButton>(R.id.pic_info_edit_date)?.setOnClickListener {
-            Utils.getDatetime(supportFragmentManager, currentPic().creationDate) {
-                PiwigoSession.setPictureInfo(currentPicId, creationDate = it) {
+            Utils.getDatetime(supportFragmentManager, currentPic().creationDate) { d ->
+                PiwigoData.setPicCreationDate(currentPicId, creationDate = Date(d)) {
                     updateBottomSheet()
                 }
             }
@@ -118,9 +123,11 @@ class ImageViewerActivity : AppCompatActivity() {
         infoDialog.findViewById<ImageButton>(R.id.pic_info_edit_keywords)?.setOnClickListener {
             val dialog = TagEditor(this) { tags ->
                 val newTags = tags.filter { t -> t.id == -1 }
-                PiwigoSession.addTags(newTags) {
-                    tags.forEach { t -> t.id = PiwigoSession.getTagFromString(t.name)?.id ?: t.id }
-                    PiwigoSession.setPictureInfo(currentPicId, tags = tags) {
+                PiwigoData.addTags(newTags) {
+                    val tagIds = mutableListOf<Int>()
+                    tags.forEach { t -> tagIds.add(PiwigoData.tags.values.firstOrNull { it.name == t.name }?.id ?: -1) }
+
+                    PiwigoData.setPicTags(currentPicId, tagIds) {
                         updateBottomSheet()
                     }
                 }
@@ -157,17 +164,16 @@ class ImageViewerActivity : AppCompatActivity() {
             }
         })
 
-        currentPicId = pagerAdapter.pictures[index]
-        pager.currentItem = index
+        pager.currentItem = pagerAdapter.pictures.indexOf(currentPicId)
         updateBottomSheet()
     }
 
     private fun currentPic() : Picture {
-        return CategoriesManager.pictures.getValue(currentPicId)
+        return PiwigoData.pictures.getValue(currentPicId)
     }
 
     private fun updateBottomSheet() {
-        CategoriesManager.pictures[currentPicId]?.getInfo(true) { info ->
+        PiwigoData.pictures[currentPicId]?.getInfo(true) { info ->
             runOnUiThread {
                 val name = info.optString("name", "null")
                 infoFilename.text = if(name == "null") info.optString("file", "Unknown") else name
@@ -181,17 +187,17 @@ class ImageViewerActivity : AppCompatActivity() {
 
 
                 var albumsTxt = ""
-                CategoriesManager.getCategoriesOf(currentPicId).forEach { c -> albumsTxt += "${c.name} - " }
+                currentPic().getCategories().forEach { id -> albumsTxt += "${PiwigoData.categories[id]?.name} - " }
                 infoAlbums.text = if(albumsTxt.isEmpty()) "None" else albumsTxt.subSequence(0, albumsTxt.length - 3)
 
                 infoSize.text = getString(R.string.size_info).format(info.optString("width", "0").toInt(), info.optString("height", "0").toInt())
 
-                infoAddedBy.text = PiwigoSession.getUser(info.optString("added_by", "-1").toInt())?.username
+                infoAddedBy.text = PiwigoData.users[info.optString("added_by", "-1").toInt()]?.username
 
                 val tags = currentPic().getTags()
                 var tagsTxt = ""
                 tags.forEach { t ->
-                    tagsTxt += t.name + " - "
+                    tagsTxt += PiwigoData.tags[t]?.name + " - "
                 }
                 infoTags.text = if(tagsTxt.isEmpty()) "None" else tagsTxt.subSequence(0, tagsTxt.length - 3)
             }
@@ -236,11 +242,11 @@ class ImageViewerActivity : AppCompatActivity() {
             }
             override fun onPrepareLoad(placeHolderDrawable: Drawable?) {}
         }
-        Picasso.with(this).load(currentPic().fullResUrl).into(target)
+        Picasso.with(this).load(currentPic().largeResUrl).into(target)
     }
 
     private fun downloadImage() {
-        val picture = CategoriesManager.pictures.getValue(pagerAdapter.pictures[pager.currentItem])
+        val picture = PiwigoData.pictures.getValue(pagerAdapter.pictures[pager.currentItem])
         fun downloadImagesPermissionGranted() {
             val path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).path + "/JPics"
             picture.saveToLocal(this, path)
@@ -267,12 +273,19 @@ class ImageViewerActivity : AppCompatActivity() {
 
         builder.setPositiveButton("OK") { _, _ ->
             selectCategory { c ->
-                PiwigoSession.movePictures(listOf(picture), checkedItem == 0, c) {
-                    CategoriesManager.refreshAllPictures {
+                if(checkedItem == 0) {
+                    PiwigoData.addPicsToCat(listOf(picture), c) {
                         runOnUiThread {
-                            pagerAdapter.pictures = CategoriesManager.currentlyDisplayedList.toList()
+                            pagerAdapter.pictures = PiwigoData.currentlyDisplayedList.toList()
+                            updateBottomSheet()
                         }
-                        updateBottomSheet()
+                    }
+                } else {
+                    PiwigoData.movePicsToCat(listOf(picture), c) {
+                        runOnUiThread {
+                            pagerAdapter.pictures = PiwigoData.currentlyDisplayedList.toList()
+                            updateBottomSheet()
+                        }
                     }
                 }
             }
@@ -287,7 +300,7 @@ class ImageViewerActivity : AppCompatActivity() {
             .setTitle("Delete image")
             .setMessage("Are you sure you want to delete this image?")
             .setIcon(android.R.drawable.ic_dialog_alert)
-            .setPositiveButton("Yes") { _, _ -> PiwigoSession.deletePictures(listOf(picture)) }
+            .setPositiveButton("Yes") { _, _ -> PiwigoData.archivePictures(listOf(picture)) { finish() } }
             .setNegativeButton("Cancel", null).show()
     }
 
@@ -295,7 +308,7 @@ class ImageViewerActivity : AppCompatActivity() {
         infoDialog.show()
     }
 
-    private fun selectCategory(callback: (cat: Category) -> Unit) {
+    private fun selectCategory(callback: (cat: Int) -> Unit) {
         val dialog = CategoryPicker(this)
         dialog.setOnCategorySelectedCallback(callback)
         dialog.show()
@@ -303,12 +316,11 @@ class ImageViewerActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState (outState: Bundle) {
         super.onSaveInstanceState(outState)
-        outState.putInt("img_index", pager.currentItem)
+        outState.putInt("img_id", currentPicId)
     }
 
-    class ImageViewerPager (private val mContext: Context) : PagerAdapter() {
+    class ImageViewerPager (private val mContext: Context, private val mActivity: ImageViewerActivity) : PagerAdapter() {
 
-        private var imageView: ZoomableImageView? = null
         var pictures: List<Int> = listOf()
             set(value) {
                 field = value
@@ -326,27 +338,33 @@ class ImageViewerActivity : AppCompatActivity() {
         override fun instantiateItem(container: ViewGroup, position: Int): Any {
 
             val inflater = mContext.getSystemService(Context.LAYOUT_INFLATER_SERVICE) as LayoutInflater
-            val itemView: View = inflater.inflate(R.layout.image_viewer_page, container, false)
 
-            imageView = itemView.findViewById(R.id.image_view)
+            val id = pictures[position]
+            val pic = PiwigoData.pictures.getValue(id)
 
-            if(position < pictures.size) {
-                val id = pictures[position]
-
-                val pic = CategoriesManager.pictures.getValue(id)
-                val imgUrl = pic.fullResUrl
-                if(imgUrl.isNotEmpty()) {
-                    Picasso.with(mContext).load(imgUrl).into(imageView)
+            val itemView =  if (pic.isVideo()) {
+                val v: View = inflater.inflate(R.layout.image_viewer_page_video, container, false)
+                val videoView = v.findViewById<ImageView>(R.id.video_view)
+                Picasso.with(mContext).load(pic.largeResUrl).into(videoView)
+                videoView?.setOnClickListener {
+                    Log.d("TAG", "Trying to start something")
+                    val intent = Intent(mContext, VideoViewerActivity::class.java)
+                    intent.putExtra("url", pic.elementUrl)
+                    ContextCompat.startActivity(mContext, intent, null)
                 }
-
-                (container as ViewPager).addView(itemView)
+                v
+            } else {
+                val v: View = inflater.inflate(R.layout.image_viewer_page, container, false)
+                Picasso.with(mContext).load(pic.largeResUrl).into(v.findViewById<ZoomableImageView>(R.id.image_view))
+                v
             }
-
+            (container as ViewPager).addView(itemView)
             return itemView
         }
 
         override fun destroyItem(container: ViewGroup, position: Int, `object`: Any) {
             (container as ViewPager).removeView(`object` as ConstraintLayout?)
         }
+
     }
 }
