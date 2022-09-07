@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.text.InputType
 import android.text.TextUtils
 import android.util.AttributeSet
-import android.util.Log
 import android.view.*
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
@@ -18,7 +17,6 @@ import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.squareup.picasso.Picasso
 
 class ExplorerFragment (private var startCat: Int? = null) :
@@ -93,8 +91,8 @@ class ExplorerFragment (private var startCat: Int? = null) :
                 if(albumTitleEditLayout.isVisible) {
                     setAlbumTitleEditMode(false)
                 } else {
-                    val parent = getCurrentCat()?.parentId
-                    if (PiwigoData.categories[parent] != null) {
+                    val parent = getCurrentCat()?.parentId ?: -1
+                    if (PiwigoData.getCategoryFromId(parent) != null) {
                         changeCategory(parent)
                     } else {
                         activity?.moveTaskToBack(true)
@@ -174,7 +172,7 @@ class ExplorerFragment (private var startCat: Int? = null) :
 
     private fun getCurrentCat() : Category?
     {
-        return PiwigoData.categories[currentCategory]
+        return PiwigoData.getCategoryFromId(currentCategory)
     }
 
     private fun setAlbumTitleEditMode(editing: Boolean) {
@@ -206,7 +204,7 @@ class ExplorerFragment (private var startCat: Int? = null) :
         cat?.let {
             albumTitle.text = cat.name
             albumTitleEdit.setText(cat.name)
-            albumPathLayout.visibility = if(PiwigoData.categories[cat.parentId] == null) View.GONE else View.VISIBLE
+            albumPathLayout.visibility = if(PiwigoData.getCategoryFromId(cat.parentId) == null) View.GONE else View.VISIBLE
 
             albumPathLayout.removeAllViews()
             val parents = cat.getHierarchy()
@@ -217,7 +215,7 @@ class ExplorerFragment (private var startCat: Int? = null) :
                 val textView = TextView(mContext)
                 textView.setTextColor(ContextCompat.getColor(mContext, R.color.white))
                 textView.textSize = 15.0f
-                var txt = PiwigoData.categories[p]?.name
+                var txt = PiwigoData.getCategoryFromId(p)?.name
                 if(!isLast) {
                     textView.ellipsize = TextUtils.TruncateAt.END
                     txt += " > "
@@ -255,7 +253,7 @@ class ExplorerFragment (private var startCat: Int? = null) :
 
         builder.setPositiveButton("OK") { dialog, _ ->
             val name = input.text.toString()
-            PiwigoData.addCategory(name, getCurrentCat()?.id ) {
+            PiwigoData.addCategory(name, getCurrentCat()?.catId ) {
                 refreshCategories()
             }
             dialog.dismiss()
@@ -408,7 +406,7 @@ class ExplorerFragment (private var startCat: Int? = null) :
                 vh.icon.setOnClickListener { fragment.addCategory() }
             } else {
                 val item = categories[position]
-                val category = PiwigoData.categories[item.catId]
+                val category = PiwigoData.getCategoryFromId(item.catId)
                 category?.let {
                     val checkbox : CheckBox = vh.checkBox
 

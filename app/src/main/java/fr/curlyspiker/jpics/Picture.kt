@@ -6,6 +6,10 @@ import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.util.Log
 import android.widget.Toast
+import androidx.room.ColumnInfo
+import androidx.room.Entity
+import androidx.room.Ignore
+import androidx.room.PrimaryKey
 import com.squareup.picasso.Picasso
 import org.json.JSONArray
 import org.json.JSONObject
@@ -15,12 +19,15 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 @SuppressLint("SimpleDateFormat")
-class Picture (val id: Int, var name: String) {
-
-    var thumbnailUrl: String = ""
+@Entity
+data class Picture (
+    @PrimaryKey val picId: Int,
+    var name: String) {
+    @ColumnInfo(name="thumbnail_url") var thumbnailUrl: String = ""
     var largeResUrl: String = ""
     var elementUrl: String = ""
 
+    @Ignore
     var creationDate: Date = Date()
         set(value) {
             field = value
@@ -33,10 +40,12 @@ class Picture (val id: Int, var name: String) {
             creationDay = cal.time
         }
 
+    @Ignore
     var creationDay: Date = Date()
 
     var isArchived = false
 
+    @Ignore
     var mInfo: JSONObject? = null
 
     init {
@@ -77,27 +86,26 @@ class Picture (val id: Int, var name: String) {
 
     fun getTags() : List<Int> {
         val out = mutableListOf<Int>()
-        PiwigoData.picturesTags.filter{ pair -> pair.first == id}.forEach { pair -> out.add(pair.second) }
+        PiwigoData.picturesTags.filter{ pair -> pair.first == picId}.forEach { pair -> out.add(pair.second) }
         return out
     }
 
     fun getCategories(recursive: Boolean = false) : List<Int> {
 
-        fun addToList(out: MutableList<Int>, c: Int, recursive: Boolean) {
-            if(!out.contains(c)) {
-                out.add(c)
+        val out = mutableListOf<Int>()
+        val directParents = DatabaseProvider.db.PictureCategoryDao().getParentsIds(picId)
+        for (parent in directParents) {
+            out.add(parent)
 
-                if(recursive) {
-                    val parents = PiwigoData.categories[c]?.getHierarchy()
-                    parents?.forEach { parent ->
-                        addToList(out, parent, recursive)
+            if(recursive) {
+                val parents = PiwigoData.getCategoryFromId(parent)?.getHierarchy()
+                parents?.forEach { parent ->
+                    if (!out.contains(parent)) {
+                        out.add(parent)
                     }
                 }
             }
         }
-
-        val out = mutableListOf<Int>()
-        PiwigoData.picturesCategories.filter { p -> p.first == id }.forEach { pair -> addToList(out, pair.second, recursive) }
         return out
     }
 
@@ -112,7 +120,7 @@ class Picture (val id: Int, var name: String) {
 
     fun getInfo(forceRefresh: Boolean = false, cb: (info: JSONObject) -> Unit = {}) {
         if(mInfo == null || forceRefresh) {
-            PiwigoAPI.pwgImagesGetInfo(id) { success, rsp ->
+            PiwigoAPI.pwgImagesGetInfo(picId) { success, rsp ->
                 if(success) {
                     mInfo = rsp
                 }
@@ -125,10 +133,10 @@ class Picture (val id: Int, var name: String) {
     fun getRepresentedBy() : List<Int> {
         val out = mutableListOf<Int>()
         Log.d("TAG", "Pic thumbnail url: $thumbnailUrl")
-        PiwigoData.categories.forEach{
-            if(it.value.thumbnailUrl == thumbnailUrl) {
-                out.add(it.key)
-                Log.d("TAG", "This pic was thumbnail to ${it.key}")
+        PiwigoData.getAllCategories().forEach{
+            if(it.thumbnailUrl == thumbnailUrl) {
+                out.add(it.catId)
+                Log.d("TAG", "This pic was thumbnail to ${it.catId}")
             }
         }
         return out
@@ -161,3 +169,7 @@ class Picture (val id: Int, var name: String) {
         }
     }
 }
+
+@Entity(primaryKeys = ["picId", "catId"], tableName = "picture_category_cross_ref")
+data class PictureCategoryCrossRef (val picId: Int,
+                                    val catId: Int)

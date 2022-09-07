@@ -309,7 +309,7 @@ class ImageListFragment (startCat: Int? = 0) :
             onStarted()
             var downloaded = 0
             pictures.forEach { pic ->
-                PiwigoData.pictures.getValue(pic).saveToLocal(requireContext(), path) {
+                PiwigoData.getPictureFromId(pic)?.saveToLocal(requireContext(), path) {
                     downloaded += 1
                     onProgress(downloaded.toFloat() / pics.size)
                 }
@@ -453,7 +453,7 @@ class ImageListFragment (startCat: Int? = 0) :
                 }
                 override fun onPrepareLoad(placeHolderDrawable: Drawable?) {}
             }
-            Picasso.with(requireContext()).load(PiwigoData.pictures.getValue(p).largeResUrl).into(target)
+            Picasso.with(requireContext()).load(PiwigoData.getPictureFromId(p)?.largeResUrl).into(target)
         }
     }
 
@@ -469,7 +469,8 @@ class ImageListFragment (startCat: Int? = 0) :
                 setPictureCreationDate(index + 1, creationDate)
             }
         }
-        Utils.getDatetime(parentFragmentManager, PiwigoData.pictures.getValue(pictures[0]).creationDate) {
+        val date = Date()
+        Utils.getDatetime(parentFragmentManager, date) {
             onStarted()
             setPictureCreationDate(0, it)
         }
@@ -494,12 +495,18 @@ class ImageListFragment (startCat: Int? = 0) :
 
         val queryLow = query.lowercase()
         val filteredTags = PiwigoData.tags.filter { t -> t.value.name.lowercase().contains(queryLow) }.keys
-        val filteredCats = PiwigoData.categories.filter { c -> c.value.name.lowercase().contains(queryLow) }.keys
+        val filteredCats = PiwigoData.getAllCategories().filter { c -> c.name.lowercase().contains(queryLow) }
+
+
+        val filteredCatsIds = mutableListOf<Int>()
+        for (cat in filteredCats) {
+            filteredCatsIds.add(cat.catId)
+        }
 
         return pics.filter { id ->
-            val pic = PiwigoData.pictures.getValue(id)
-            pic.name.lowercase().contains(queryLow) || filteredTags.intersect(pic.getTags()).isNotEmpty() ||
-                pic.getCategories(recursive = true).intersect(filteredCats).isNotEmpty()
+            val pic = PiwigoData.getPictureFromId(id)
+            pic != null && (pic.name.lowercase().contains(queryLow) || filteredTags.intersect(pic.getTags()).isNotEmpty() ||
+                pic.getCategories(recursive = true).intersect(filteredCatsIds).isNotEmpty())
 
         }
     }
@@ -507,7 +514,18 @@ class ImageListFragment (startCat: Int? = 0) :
     override fun onImagesReady(catId: Int?) {
         if(this.catId == null || this.catId == catId || catId == null) {
             pics.clear()
-            PiwigoData.picturesCategories.filter { e -> e.second == this.catId || (this.catId == null && e.second != PiwigoData.getArchiveCat()) }.forEach { pics.add(it.first) }
+
+            if (catId != null) {
+                PiwigoData.getCategoryFromId(catId)?.getChildren()?.forEach { pics.add(it) }
+            }
+
+            else if (this.catId != null) {
+                PiwigoData.getCategoryFromId(this.catId!!)?.getChildren()?.forEach { pics.add(it) }
+            }
+
+            else {
+                DatabaseProvider.db.PictureDao().getAllIds().forEach { pics.add(it) }
+            }
             onFilterChanged()
         }
     }
@@ -528,7 +546,7 @@ class ImageListFragment (startCat: Int? = 0) :
                 override val creationDate = picture()?.creationDay ?: Date()
                 var checked = false
                 fun picture() : Picture? {
-                    return PiwigoData.pictures[id.toInt()]
+                    return PiwigoData.getPictureFromId(id.toInt())
                 }
             }
 
@@ -580,9 +598,9 @@ class ImageListFragment (startCat: Int? = 0) :
         fun replaceAll(models: List<Int>) {
 
             val picsList = mutableListOf<Picture>()
-            models.forEach { m -> picsList.add(PiwigoData.pictures.getValue(m)) }
+            models.forEach { m -> PiwigoData.getPictureFromId(m)?.let{ picsList.add(it) } }
 
-            picsList.sortWith(compareByDescending<Picture>{ it.creationDate }.thenBy{ it.name }.thenBy{ it.id })
+            picsList.sortWith(compareByDescending<Picture>{ it.creationDate }.thenBy{ it.name }.thenBy{ it.picId })
             GlobalScope.launch(Dispatchers.IO) {
                 val groupedList = picsList.groupBy { p ->
                     p.creationDay
@@ -592,7 +610,7 @@ class ImageListFragment (startCat: Int? = 0) :
                 for(i in groupedList.keys){
                     newItems.add(DataItem.Header(i))
                     for(v in groupedList.getValue(i)){
-                        newItems.add(DataItem.PictureItem(v.id))
+                        newItems.add(DataItem.PictureItem(v.picId))
                     }
                 }
 

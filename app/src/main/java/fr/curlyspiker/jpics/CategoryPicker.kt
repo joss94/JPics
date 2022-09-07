@@ -61,7 +61,7 @@ class CategoryPicker(context: Context) : Dialog(context) {
 
     private fun onCategoryChanged() {
         categoryName.text = categoriesAdapter.getCurrentCat()?.name
-        backButton.visibility = if(PiwigoData.categories[categoriesAdapter.getCurrentCat()?.parentId] == null) View.INVISIBLE else View.VISIBLE
+        backButton.visibility = if(PiwigoData.getCategoryFromId(categoriesAdapter.getCurrentCat()?.parentId ?: -1) == null) View.INVISIBLE else View.VISIBLE
     }
 
     fun setOnCategorySelectedCallback(cb: (c: Int) -> Unit) {
@@ -83,7 +83,7 @@ class CategoryPicker(context: Context) : Dialog(context) {
         private var selectedCategory = currentCategory
 
         fun getCurrentCat() : Category? {
-            return PiwigoData.categories[currentCategory]
+            return PiwigoData.getCategoryFromId(currentCategory)
         }
 
         fun getSelectedCat() : Int {
@@ -116,7 +116,7 @@ class CategoryPicker(context: Context) : Dialog(context) {
 
         override fun onBindViewHolder(vh: ViewHolder, position: Int) {
             val catId = catIDs[position]
-            val category = PiwigoData.categories[catId]
+            val category = PiwigoData.getCategoryFromId(catId)
             category?.let {
                 vh.title.text = category.name
                 val nSubAlbums = category.getChildren().size

@@ -69,9 +69,10 @@ object PiwigoServerHelper {
                         else {
                             cb(rsp)
                         }
-                    } catch (e: Exception) {
+                    } catch (e: JSONException) {
                         cb(JSONObject())
-                        Log.d("PSH", "Problem parsing response ${response}: $e")
+                        Log.d("PSH", "Problem parsing response ${response}")
+                        Log.d("PSH", e.toString())
                     }
                 }
             },

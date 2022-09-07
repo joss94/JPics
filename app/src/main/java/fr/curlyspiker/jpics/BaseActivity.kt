@@ -12,6 +12,8 @@ open class BaseActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        DatabaseProvider.initDB(applicationContext)
+
         PiwigoServerHelper.initialize(Volley.newRequestQueue(this))
 
         val prefs = getSharedPreferences("fr.curlyspiker.jpics", Context.MODE_PRIVATE)

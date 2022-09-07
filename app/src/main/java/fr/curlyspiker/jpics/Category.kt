@@ -1,18 +1,22 @@
 package fr.curlyspiker.jpics
 
+import androidx.room.ColumnInfo
+import androidx.room.Entity
+import androidx.room.PrimaryKey
 import org.json.JSONObject
 
-class Category (
-    val id: Int,
+@Entity
+data class Category (
+    @PrimaryKey val catId: Int,
     var name: String,
-    var parentId: Int = -1
+    @ColumnInfo(name = "parent_id") var parentId: Int = -1
 ) {
 
     var thumbnailId: Int = -1
     var thumbnailUrl: String = ""
         get() {
             if (field.isEmpty() && getPictures(recursive = true).isNotEmpty()) {
-                PiwigoData.refreshCategoryRepresentative(id)
+                PiwigoData.refreshCategoryRepresentative(catId)
             }
             return field
         }
@@ -41,18 +45,18 @@ class Category (
     }
 
     fun getChildren(): List<Int> {
-        return PiwigoData.categories.filter { e -> e.value.parentId == id}.keys.toList()
+        return DatabaseProvider.db.CategoryDao().findCategoryChildren(catId)
     }
 
     fun getPictures(recursive: Boolean = false, getArchived: Boolean = false) : List<Int>  {
 
         val out = mutableListOf<Int>()
-        PiwigoData.picturesCategories.filter { pair -> pair.second == id && (!(PiwigoData.pictures[pair.first]?.isArchived ?: false) || getArchived) }.forEach {
-            out.add(it.first)
+        DatabaseProvider.db.PictureCategoryDao().getPicturesIds(catId).forEach {
+            out.add(it)
         }
 
         if(recursive) {
-            getChildren().forEach { out.addAll(PiwigoData.categories[it]?.getPictures(recursive, getArchived) ?: listOf()) }
+            getChildren().forEach { out.addAll(PiwigoData.getCategoryFromId(it)?.getPictures(recursive, getArchived) ?: listOf()) }
         }
         return out
     }
@@ -60,8 +64,8 @@ class Category (
     fun getHierarchy() : List<Int> {
         val parents: MutableList<Int> = mutableListOf()
 
-        parents.add(id)
-        PiwigoData.categories[parentId]?.getHierarchy()?.forEach { p ->
+        parents.add(catId)
+        PiwigoData.getCategoryFromId(parentId)?.getHierarchy()?.forEach { p ->
             if(p !in parents) {
                 parents.add(p)
             }

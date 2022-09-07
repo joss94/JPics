@@ -169,11 +169,11 @@ class ImageViewerActivity : AppCompatActivity() {
     }
 
     private fun currentPic() : Picture {
-        return PiwigoData.pictures.getValue(currentPicId)
+        return PiwigoData.getPictureFromId(currentPicId)!!
     }
 
     private fun updateBottomSheet() {
-        PiwigoData.pictures[currentPicId]?.getInfo(true) { info ->
+        currentPic().getInfo(true) { info ->
             runOnUiThread {
                 val name = info.optString("name", "null")
                 infoFilename.text = if(name == "null") info.optString("file", "Unknown") else name
@@ -187,7 +187,7 @@ class ImageViewerActivity : AppCompatActivity() {
 
 
                 var albumsTxt = ""
-                currentPic().getCategories().forEach { id -> albumsTxt += "${PiwigoData.categories[id]?.name} - " }
+                currentPic().getCategories().forEach { id -> albumsTxt += "${PiwigoData.getCategoryFromId(id)?.name} - " }
                 infoAlbums.text = if(albumsTxt.isEmpty()) "None" else albumsTxt.subSequence(0, albumsTxt.length - 3)
 
                 infoSize.text = getString(R.string.size_info).format(info.optString("width", "0").toInt(), info.optString("height", "0").toInt())
@@ -246,10 +246,10 @@ class ImageViewerActivity : AppCompatActivity() {
     }
 
     private fun downloadImage() {
-        val picture = PiwigoData.pictures.getValue(pagerAdapter.pictures[pager.currentItem])
+        val picture = PiwigoData.getPictureFromId(pagerAdapter.pictures[pager.currentItem])
         fun downloadImagesPermissionGranted() {
             val path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).path + "/JPics"
-            picture.saveToLocal(this, path)
+            picture?.saveToLocal(this, path)
         }
 
         if(ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
@@ -340,7 +340,7 @@ class ImageViewerActivity : AppCompatActivity() {
             val inflater = mContext.getSystemService(Context.LAYOUT_INFLATER_SERVICE) as LayoutInflater
 
             val id = pictures[position]
-            val pic = PiwigoData.pictures.getValue(id)
+            val pic = PiwigoData.getPictureFromId(id)!!
 
             val itemView =  if (pic.isVideo()) {
                 val v: View = inflater.inflate(R.layout.image_viewer_page_video, container, false)

@@ -1,10 +1,10 @@
 package fr.curlyspiker.jpics
 
+import android.provider.ContactsContract
 import android.util.Base64
 import android.util.Log
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentMap
 
 interface PiwigoDataListener {
     fun onImagesReady(catId: Int?)
@@ -20,11 +20,6 @@ object PiwigoData {
         fun onProgress(progress: Float)
     }
 
-    var pictures = ConcurrentHashMap<Int, Picture>()
-
-    var categories = ConcurrentHashMap<Int, Category>()
-    var picturesCategories = Collections.synchronizedList(mutableListOf<Pair<Int, Int>>())
-
     var tags = ConcurrentHashMap<Int, PicTag>()
     var picturesTags = Collections.synchronizedList(mutableListOf<Pair<Int, Int>>())
 
@@ -34,7 +29,7 @@ object PiwigoData {
 
     var currentlyDisplayedList = Collections.synchronizedList(mutableListOf<Int>())
 
-    init{ categories[0] = Category(0, "Home") }
+    var homeCat = Category(0, "Home")
 
     fun addListener(l: PiwigoDataListener?) {
         listeners.add(l)
@@ -59,14 +54,12 @@ object PiwigoData {
     fun refreshAllPictures(cb: () -> Unit) {
 
         refreshPictures(null) { success, pics ->
-            val newPics = ConcurrentHashMap<Int, Picture>()
-            val newPictureCats = Collections.synchronizedList(mutableListOf<Pair<Int, Int>>())
             pics.forEach { p ->
-                newPics[p.id] = p
-                p.getCategoriesFromInfoJson().forEach { catId -> newPictureCats.add(Pair(p.id, catId)) }
+                DatabaseProvider.db.PictureDao().insertOrReplace(p)
+                p.getCategoriesFromInfoJson().forEach { catId ->
+                    DatabaseProvider.db.PictureCategoryDao().insertOrReplace(PictureCategoryCrossRef(p.picId, catId))
+                }
             }
-            this.pictures = newPics
-            this.picturesCategories = newPictureCats
 
             listeners.forEach { it?.onImagesReady(null) }
             cb()
@@ -75,18 +68,24 @@ object PiwigoData {
 
     fun refreshPictures(cats: List<Int>?, callback: (success: Boolean, pictures: List<Picture>) -> Unit) {
         val pictures = Collections.synchronizedList(mutableListOf<Picture>())
+        val picIds = Collections.synchronizedList(mutableListOf<Int>())
         fun getPicturesNextPage(page: Int = 0) {
             PiwigoAPI.pwgCategoriesGetImages(cats, page = page, perPage = 500, order = "date_creation") { success, pics ->
                 if(success) {
                     pictures.addAll(pics)
+                    for (pic in pics) {
+                        picIds.add(pic.picId)
+                    }
+
                     if(pics.size == 500) {
                         getPicturesNextPage(page + 1)
                     } else {
-                        picturesCategories.removeIf { pair -> cats?.contains(pair.second) ?: true }
+                        cats?.let {
+                            DatabaseProvider.db.PictureCategoryDao().deletePicsNotInCats(picIds.toIntArray(), cats.toIntArray())
+                        }
                         pictures.forEach { p ->
-                            this.pictures[p.id] = p
                             p.getCategoriesFromInfoJson().forEach { catId ->
-                                picturesCategories.add(Pair(p.id, catId))
+                                DatabaseProvider.db.PictureCategoryDao().insertOrReplace(PictureCategoryCrossRef(p.picId, catId))
                             }
                         }
                         callback(success, pictures)
@@ -102,12 +101,10 @@ object PiwigoData {
         Log.d("TAG", "Refreshing categories")
         PiwigoAPI.pwgCategoriesGetList(recursive = true) { success, categories ->
             if(success) {
-                val newCats = ConcurrentHashMap<Int, Category>()
-                newCats[0] = Category(0, "Home")
+                DatabaseProvider.db.CategoryDao().insertOrReplace(homeCat)
                 categories.forEach { c ->
-                    newCats[c.id] = c
+                    DatabaseProvider.db.CategoryDao().insertOrReplace(c)
                 }
-                this.categories = newCats
 
                 when {
                     getInstantUploadCat() == null -> {
@@ -139,7 +136,7 @@ object PiwigoData {
     fun addCategory(name: String, parentId: Int? = null, visible: Boolean = true, callback: (success: Boolean) -> Unit) {
         PiwigoAPI.pwgCategoriesAdd(name, parentId, isPublic = false, visible = visible) { success, id, rsp ->
             if(success && id != null) {
-                categories[id] = Category(id, name, parentId ?: -1)
+                DatabaseProvider.db.CategoryDao().insertAll(Category(id, name, parentId ?: -1))
                 listeners.forEach { it?.onCategoriesReady() }
                 refreshPictures(listOf(id)) { _, _ -> }
                 callback(success)
@@ -155,8 +152,8 @@ object PiwigoData {
                 val cat = cats[index]
                 PiwigoAPI.pwgCategoriesDelete(cat, PiwigoSession.token) { success, _ ->
                     if(success) {
-                        categories.remove(cat)
-                        picturesCategories.removeIf { pair -> pair.second == cat }
+                        DatabaseProvider.db.CategoryDao().deleteFromId(cat)
+                        DatabaseProvider.db.PictureCategoryDao().deleteCat(cat)
                         listeners.forEach { it?.onCategoriesReady() }
                     }
                     listener?.onProgress(index.toFloat() / cats.size)
@@ -175,11 +172,15 @@ object PiwigoData {
             if(index >= cats.size) {
                 listener?.onCompleted()
             } else {
-                val cat = cats[index]
-                PiwigoAPI.pwgCategoriesMove(cat, PiwigoSession.token, parentId) { success, _ ->
+                val catID = cats[index]
+                PiwigoAPI.pwgCategoriesMove(catID, PiwigoSession.token, parentId) { success, _ ->
                     if(success) {
-                        categories[cat]?.parentId = parentId
-                        listeners.forEach { it?.onCategoriesReady() }
+                        DatabaseProvider.db.CategoryDao().loadOneById(catID)?.let { cat ->
+                            cat.parentId = parentId
+                            DatabaseProvider.db.CategoryDao().update(cat)
+                            listeners.forEach { it?.onCategoriesReady() }
+                        }
+
                     }
                     listener?.onProgress(index.toFloat() / cats.size)
                     moveNext(index + 1)
@@ -191,11 +192,26 @@ object PiwigoData {
         moveNext()
     }
 
+    fun getAllCategories(): List<Category> {
+        return DatabaseProvider.db.CategoryDao().getAll()
+    }
+
+    fun getCategoryFromId(id: Int): Category? {
+        return DatabaseProvider.db.CategoryDao().loadOneById(id)
+    }
+
+    fun getPictureFromId(id: Int): Picture? {
+        return DatabaseProvider.db.PictureDao().loadOneById(id)
+    }
+
     fun setCategoryName(catId: Int, name: String, cb: () -> Unit) {
         PiwigoAPI.pwgCategoriesSetInfo(catId, name = name) { success, _ ->
             if(success) {
-                categories[catId]?.name = name
-                listeners.forEach { it?.onCategoriesReady() }
+                DatabaseProvider.db.CategoryDao().loadOneById(catId)?.let { cat ->
+                    cat.name = name
+                    DatabaseProvider.db.CategoryDao().update(cat)
+                    listeners.forEach { it?.onCategoriesReady() }
+                }
             }
             cb()
         }
@@ -234,7 +250,7 @@ object PiwigoData {
                     val id = ids[0]
                     if(!success) { // Error finding whether image exists or not
                         listener?.onCompleted()
-                    } else if(id != null && pictures[id] != null) { // Image already exists, get it directly from local pictures
+                    } else if(id != null && DatabaseProvider.db.PictureDao().loadOneById(id) != null) { // Image already exists, get it directly from local pictures
                         if(cats?.isNotEmpty() == true){
                             cats.forEach { c -> addPicsToCat(listOf(id), c) {} }
                         }
@@ -248,8 +264,10 @@ object PiwigoData {
                                     PiwigoAPI.pwgImagesGetInfo(id) { success2, rsp ->
                                         if(success2) {
                                             val p = Picture.fromJson(rsp)
-                                            pictures[p.id] = p
-                                            p.getCategoriesFromInfoJson().forEach { catId -> picturesCategories.add(Pair(p.id, catId)) }
+                                            DatabaseProvider.db.PictureDao().insertOrReplace(p)
+                                            p.getCategoriesFromInfoJson().forEach { catId ->
+                                                DatabaseProvider.db.PictureCategoryDao().insertOrReplace(PictureCategoryCrossRef(p.picId, catId))
+                                            }
                                             listeners.forEach { it?.onImagesReady(null) }
                                         }
                                     }
@@ -291,17 +309,18 @@ object PiwigoData {
     fun deleteImages(ids: List<Int>, callback: () -> Unit) {
         PiwigoAPI.pwgImagesDelete(ids, PiwigoSession.token) { success, rsp ->
             if(success) {
+
                 // Apply changes locally
                 ids.forEach { id ->
-                    pictures.remove(id)
-                    picturesCategories.removeIf { pair -> pair.first == id }
-                    picturesTags.removeIf { pair -> pair.first == id }
-                }
-                ids.forEach {
-                    pictures[it]?.getRepresentedBy()?.forEach { cat ->
+                    DatabaseProvider.db.PictureDao().loadOneById(id)?.getRepresentedBy()?.forEach { cat ->
                         refreshCategoryRepresentative(cat)
                     }
+
+                    DatabaseProvider.db.PictureDao().deleteFromId(id)
+                    DatabaseProvider.db.PictureCategoryDao().deletePic(id)
+                    picturesTags.removeIf { pair -> pair.first == id }
                 }
+
                 listeners.forEach { it?.onImagesReady(null) }
                 callback()
             }
@@ -312,7 +331,7 @@ object PiwigoData {
         PiwigoAPI.pwgJpicsImagesArchive(picsIds, true) { success, _ ->
             if (success) {
                 picsIds.forEach {
-                    pictures[it]?.getRepresentedBy()?.forEach { cat ->
+                    DatabaseProvider.db.PictureDao().loadOneById(it)?.getRepresentedBy()?.forEach { cat ->
                         refreshCategoryRepresentative(cat)
                     }
                 }
@@ -334,8 +353,9 @@ object PiwigoData {
                 PiwigoAPI.pwgImagesSetInfo(id, categories = listOf(newCategory), multipleValueMode = "append") { success, rsp ->
                     listener?.onProgress(index.toFloat() / pics.size)
                     if(success) {
-                        val pair = Pair(id, newCategory)
-                        if(pair !in picturesCategories) { picturesCategories.add(pair) }
+                        DatabaseProvider.db.PictureCategoryDao().insertOrReplace(
+                            PictureCategoryCrossRef(id, newCategory)
+                        )
                     }
                     moveNext(index + 1)
                 }
@@ -354,9 +374,8 @@ object PiwigoData {
         PiwigoAPI.pwgJpicsImagesMoveToCategory(pics, newCategory) { success, _ ->
             if (success) {
                 for (id in pics) {
-                    val pair = Pair(id, newCategory)
-                    if(pair !in picturesCategories) { picturesCategories.add(pair) }
-                    picturesCategories.removeIf { pair -> pair.first == id && pair.second != newCategory }
+                    DatabaseProvider.db.PictureCategoryDao().insertOrReplace(PictureCategoryCrossRef(id, newCategory))
+                    DatabaseProvider.db.PictureCategoryDao().deletePicFromOtherCats(id, newCategory)
                 }
             }
             listener?.onCompleted()
@@ -369,13 +388,12 @@ object PiwigoData {
             if(index < pics.size) {
                 // Apply changes remotely
                 val id = pics[index]
-                val cats = pictures[id]?.getCategories()?.filter { it != cat }?.toMutableList()
+                val cats = DatabaseProvider.db.PictureDao().loadOneById(id)?.getCategories()?.filter { it != cat }?.toMutableList()
                 if(cats?.isEmpty() == true) { cats.add(if(cat == getArchiveCat()) getNoAlbumCat()!! else getArchiveCat()!!) }
                 PiwigoAPI.pwgImagesSetInfo(id, categories = cats, multipleValueMode = "replace") { success, rsp ->
                     listener?.onProgress(index.toFloat() / pics.size)
                     if(success) {
-                        picturesCategories.removeIf { pair -> pair.first == id }
-                        cats?.forEach { c -> picturesCategories.add(Pair(id, c)) }
+                        DatabaseProvider.db.PictureCategoryDao().delete(PictureCategoryCrossRef(id, cat))
                     }
                     moveNext(index + 1)
                 }
@@ -392,27 +410,32 @@ object PiwigoData {
     }
 
     fun refreshCategoryRepresentative(cat: Int) {
-        val category = categories[cat]
-        val validPic = category?.getPictures(true)?.firstOrNull { id -> pictures[id]?.thumbnailUrl?.isNotEmpty() == true }
-        if(validPic != null) {
-            Log.d("TAG", "Setting representative for cat $cat: $validPic")
-            category.thumbnailUrl = pictures.getValue(validPic).thumbnailUrl
-            PiwigoAPI.pwgCategoriesSetRepresentative(cat, validPic) { success, rsp ->
-                listeners.forEach { it?.onCategoriesReady() }
+        DatabaseProvider.db.CategoryDao().loadOneById(cat)?.let { category ->
+            val validPic = category.getPictures(true).firstOrNull { id -> DatabaseProvider.db.PictureDao().loadOneById(id)?.thumbnailUrl?.isNotEmpty() == true }
+            if(validPic != null) {
+                Log.d("TAG", "Setting representative for cat $cat: $validPic")
+                category.thumbnailUrl = DatabaseProvider.db.PictureDao().loadOneById(validPic)!!.thumbnailUrl
+                PiwigoAPI.pwgCategoriesSetRepresentative(cat, validPic) { success, rsp ->
+                    listeners.forEach { it?.onCategoriesReady() }
+                }
+            } else {
+                PiwigoAPI.pwgCategoriesDeleteRepresentative(cat) { _, _ ->
+                    Log.d("TAG", "Deleting represnetative")
+                    category.thumbnailUrl = ""
+                    listeners.forEach { it?.onCategoriesReady() }
+                }
             }
-        } else {
-            PiwigoAPI.pwgCategoriesDeleteRepresentative(cat) { _, _ ->
-                Log.d("TAG", "Deleting represnetative")
-                category?.thumbnailUrl = ""
-                listeners.forEach { it?.onCategoriesReady() }
-            }
+            DatabaseProvider.db.CategoryDao().update(category)
         }
     }
 
     fun setPicCreationDate(picId: Int, creationDate: Date, cb: () -> Unit) {
         PiwigoAPI.pwgImagesSetInfo(picId, creationDate = creationDate, singleValueMode = "replace") { success, rsp ->
             if(success) {
-                pictures[picId]?.creationDate = creationDate
+                DatabaseProvider.db.PictureDao().loadOneById(picId)?.let { p ->
+                    p.creationDate = creationDate
+                    DatabaseProvider.db.PictureDao().insertOrReplace(p)
+                }
                 listeners.forEach { it?.onImagesReady(null) }
             }
             cb()
@@ -422,7 +445,10 @@ object PiwigoData {
     fun setPicName(picId: Int, name: String, cb: () -> Unit) {
         PiwigoAPI.pwgImagesSetInfo(picId, name = name, singleValueMode = "replace") { success, rsp ->
             if(success) {
-                pictures[picId]?.name = name
+                DatabaseProvider.db.PictureDao().loadOneById(picId)?.let { p ->
+                    p.name = name
+                    DatabaseProvider.db.PictureDao().insertOrReplace(p)
+                }
                 listeners.forEach { it?.onImagesReady(null) }
             }
             cb()
@@ -485,15 +511,15 @@ object PiwigoData {
 
 
     fun getInstantUploadCat() : Int? {
-        return categories.values.firstOrNull { c -> c.name.contains("JPicsInstantUpload")}?.id
+        return DatabaseProvider.db.CategoryDao().findByName("JPicsInstantUpload")?.catId
     }
 
     fun getArchiveCat() : Int? {
-        return categories.values.firstOrNull { c -> c.name.contains("JPicsArchiveFolder")}?.id
+        return DatabaseProvider.db.CategoryDao().findByName("JPicsArchiveFolder")?.catId
     }
 
     fun getNoAlbumCat() : Int? {
-        return categories.values.firstOrNull { c -> c.name.contains("JPicsNoAlbum")}?.id
+        return DatabaseProvider.db.CategoryDao().findByName("JPicsNoAlbum")?.catId
     }
 }
 
