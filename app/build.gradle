@@ -33,6 +33,7 @@ android {
     buildFeatures {
         viewBinding true
     }
+    namespace 'fr.curlyspiker.jpics'
 }
 
 dependencies {

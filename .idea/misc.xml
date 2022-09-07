@@ -45,10 +45,13 @@
         <entry key="app/src/main/res/menu/explorer_menu.xml" value="0.5432291666666667" />
         <entry key="app/src/main/res/menu/explorer_menu_archive.xml" value="0.35572916666666665" />
         <entry key="app/src/main/res/menu/viewer_menu.xml" value="0.2995614035087719" />
+        <entry key="app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml" value="0.143" />
+        <entry key="app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml" value="0.1965" />
         <entry key="app/src/main/res/xml/filepaths.xml" value="0.23333333333333334" />
       </map>
     </option>
   </component>
+  <component name="ExternalStorageConfigurationManager" enabled="true" />
   <component name="ProjectPlainTextFileTypeManager">
     <file url="file://$PROJECT_DIR$/app/src/main/res/drawable/logo.xml" />
   </component>

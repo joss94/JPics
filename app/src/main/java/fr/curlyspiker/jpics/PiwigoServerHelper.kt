@@ -55,7 +55,20 @@ object PiwigoServerHelper {
             { response ->
                 GlobalScope.launch(Dispatchers.IO) {
                     try {
-                        cb(JSONObject(response))
+                        val rsp = JSONObject(response)
+                        if (rsp.optString("stat", "error") == "ok") {
+                            try {
+                                val result = rsp.getJSONObject("result")
+                                cb(result)
+                            } catch (e: JSONException) {
+                                cb(rsp)
+                                Log.d("PSH", e.toString())
+                                Log.d("PSH", params.toString())
+                            }
+                        }
+                        else {
+                            cb(rsp)
+                        }
                     } catch (e: Exception) {
                         cb(JSONObject())
                         Log.d("PSH", "Problem parsing response ${response}: $e")
