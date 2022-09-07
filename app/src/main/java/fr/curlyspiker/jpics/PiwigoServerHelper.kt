@@ -86,12 +86,9 @@ object PiwigoServerHelper {
                 params.keys().forEach { key ->
                     val obj = params[key]
                     if(obj is JSONArray) {
-                        content += "&$key[]="
                         for(i in 0 until obj.length()) {
+                            content += "&$key[]="
                             content += URLEncoder.encode(obj[i].toString(), "utf-8")
-                            if(i < obj.length() - 1) {
-                                content += ","
-                            }
                         }
                     } else {
                         val txt = URLEncoder.encode(obj.toString(), "utf-8")

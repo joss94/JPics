@@ -309,18 +309,20 @@ object PiwigoData {
     }
 
     fun archivePictures(picsIds: List<Int>, listener : ProgressListener? = null, callback: () -> Unit = {}) {
-        movePicsToCat(picsIds, getArchiveCat()!!, listener) {
-            picsIds.forEach {
-                pictures[it]?.getRepresentedBy()?.forEach { cat ->
-                    refreshCategoryRepresentative(cat)
+        PiwigoAPI.pwgJpicsImagesArchive(picsIds, true) { success, _ ->
+            if (success) {
+                picsIds.forEach {
+                    pictures[it]?.getRepresentedBy()?.forEach { cat ->
+                        refreshCategoryRepresentative(cat)
+                    }
                 }
+                callback()
             }
-            callback()
         }
     }
 
     fun restorePictures(picsIds: List<Int>, listener : ProgressListener? = null) {
-        removePicsFromCat(picsIds, getArchiveCat()!!, listener) {}
+        PiwigoAPI.pwgJpicsImagesArchive(picsIds, false) { _, _ -> }
     }
 
     fun addPicsToCat(pics: List<Int>, newCategory: Int, listener : ProgressListener? = null, callback: () -> Unit) {
@@ -349,34 +351,17 @@ object PiwigoData {
     }
 
     fun movePicsToCat(pics: List<Int>, newCategory: Int, listener : ProgressListener? = null, callback: () -> Unit) {
-        fun moveNext(index: Int = 0) {
-            if(index < pics.size) {
-
-                // Apply changes remotely
-                val id = pics[index]
-                PiwigoAPI.pwgImagesSetInfo(id, categories = listOf(newCategory), multipleValueMode = "replace") { success, rsp ->
-                    listener?.onProgress(index.toFloat() / pics.size)
-                    if(success) {
-                        val pair = Pair(id, newCategory)
-                        if(pair !in picturesCategories) { picturesCategories.add(pair) }
-                        picturesCategories.removeIf { pair -> pair.first == id && pair.second != newCategory }
-                    }
-                    moveNext(index + 1)
+        PiwigoAPI.pwgJpicsImagesMoveToCategory(pics, newCategory) { success, _ ->
+            if (success) {
+                for (id in pics) {
+                    val pair = Pair(id, newCategory)
+                    if(pair !in picturesCategories) { picturesCategories.add(pair) }
+                    picturesCategories.removeIf { pair -> pair.first == id && pair.second != newCategory }
                 }
-            } else {
-                pics.forEach {
-                    pictures[it]?.getRepresentedBy()?.forEach { cat ->
-                        refreshCategoryRepresentative(cat)
-                    }
-                }
-                listeners.forEach { it?.onImagesReady(null) }
-                listener?.onCompleted()
-                callback()
             }
+            listener?.onCompleted()
+            callback()
         }
-
-        listener?.onStarted()
-        moveNext()
     }
 
     fun removePicsFromCat(pics: List<Int>, cat: Int, listener : ProgressListener? = null, callback: () -> Unit) {

@@ -261,7 +261,31 @@ object PiwigoAPI {
         req.put("multiple_value_mode", multipleValueMode)
 
         PiwigoServerHelper.volleyPost(req) { rsp ->
-            cb(true, rsp) //TODO: Build correct reply
+            cb(true, rsp)
+        }
+    }
+
+    fun pwgJpicsImagesArchive(imageIds: List<Int>, archive: Boolean, cb: (Boolean, JSONObject) -> Unit) {
+        val req = JSONObject()
+
+        req.put("method", "jpics.images.archive")
+        req.put("image_id", JSONArray(imageIds))
+        req.put("archive", archive)
+
+        PiwigoServerHelper.volleyPost(req) { rsp ->
+            cb(true, rsp)
+        }
+    }
+
+    fun pwgJpicsImagesMoveToCategory(imageIds: List<Int>, categoryId: Int, cb: (Boolean, JSONObject) -> Unit) {
+        val req = JSONObject()
+
+        req.put("method", "jpics.images.moveToCategory")
+        req.put("image_id", JSONArray(imageIds))
+        req.put("cat_id", categoryId)
+
+        PiwigoServerHelper.volleyPost(req) { rsp ->
+            cb(true, rsp)
         }
     }
 
