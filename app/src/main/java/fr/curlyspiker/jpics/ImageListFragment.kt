@@ -633,6 +633,7 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
                     i.checked = true
                 }
             }
+            fragment.actionMode?.title = getSelectedPictures().size.toString()
             notifyDataSetChanged()
         }
 
