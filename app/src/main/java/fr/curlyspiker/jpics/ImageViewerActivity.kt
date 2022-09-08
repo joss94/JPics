@@ -266,7 +266,7 @@ class ImageViewerActivity : AppCompatActivity() {
         builder.setPositiveButton("OK") { _, _ ->
             selectCategory { c ->
                 if(checkedItem == 0) {
-                    PiwigoData.addPicsToCat(listOf(picture), c) {
+                    PiwigoData.addPicsToCats(listOf(picture), listOf(c)) {
                         runOnUiThread {
                             pagerAdapter.pictures = PiwigoData.currentlyDisplayedList.toList()
                             updateBottomSheet()

@@ -258,11 +258,18 @@ object PiwigoData {
             if(isReady) {
                 PiwigoAPI.pwgImagesExist(listOf(bytes)) { success, ids ->
                     val id = ids[0]
-                    if(!success) { // Error finding whether image exists or not
+                    if(!success) { // Error finding whether mage exists or not
                         listener?.onCompleted()
-                    } else if(id != null) { // Image already exists, get it directly from local pictures
-                        cats?.forEach { c -> addPicsToCat(listOf(id), c) {} }
-                        restorePictures(listOf(id))
+                    } else if(id != null) { // Image already exists, get it directly from local pictures*
+                        addPicsToCats(listOf(id), cats ?: listOf()) {
+                            if (getPictureFromId(id)?.isArchived == true) {
+                                restorePictures(listOf(id)) {
+                                    listener?.onCompleted()
+                                }
+                            }else {
+                                listener?.onCompleted()
+                            }
+                        }
                     } else {
                         listener?.onStarted()
                         sendImageByChunks {
@@ -327,8 +334,12 @@ object PiwigoData {
 
                 val img = PiwigoAPI.ImageUploadData(bitmap, filename, Date(date), creationDate = Date(date))
                 addImage(img, cats, tags, object : ProgressListener {
-                    override fun onStarted() {}
-                    override fun onCompleted() { addNext(index + 1) }
+                    override fun onStarted() {
+                    }
+                    override fun onCompleted() {
+                        listener?.onProgress( ((index + 1).toFloat()) / imgs.size )
+                        addNext(index + 1)
+                    }
                     override fun onProgress(progress: Float) {
                         listener?.onProgress( (index.toFloat() + progress) / imgs.size )
                     }
@@ -384,23 +395,27 @@ object PiwigoData {
         archivePictures(picsIds, false, callback)
     }
 
-    fun addPicsToCat(pics: List<Int>, newCategory: Int, listener : ProgressListener? = null, callback: () -> Unit) {
+    fun addPicsToCats(pics: List<Int>, cats: List<Int>, listener : ProgressListener? = null, callback: () -> Unit) {
         fun moveNext(index: Int = 0) {
             if(index < pics.size) {
 
                 // Apply changes remotely
                 val id = pics[index]
-                PiwigoAPI.pwgImagesSetInfo(id, categories = listOf(newCategory), multipleValueMode = "append") { success, _ ->
+                PiwigoAPI.pwgImagesSetInfo(id, categories = cats, multipleValueMode = "append") { success, _ ->
                     listener?.onProgress(index.toFloat() / pics.size)
                     if(success) {
-                        DatabaseProvider.db.PictureCategoryDao().insertOrReplace(
-                            PictureCategoryCrossRef(id, newCategory)
-                        )
+                        cats.forEach { catId ->
+                            DatabaseProvider.db.PictureCategoryDao().insertOrReplace(
+                                PictureCategoryCrossRef(id, catId)
+                            )
+                        }
                     }
                     moveNext(index + 1)
                 }
             } else {
-                listeners.forEach { it?.onImagesReady(newCategory) }
+                cats.forEach { catId ->
+                    listeners.forEach { it?.onImagesReady(catId) }
+                }
                 listener?.onCompleted()
                 callback()
             }

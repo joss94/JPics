@@ -8,14 +8,10 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.ImageDecoder
 import android.graphics.drawable.Drawable
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.os.Environment
-import android.provider.MediaStore
-import android.provider.OpenableColumns
 import android.util.Log
 import android.view.*
 import android.widget.*
@@ -36,7 +32,6 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.core.content.FileProvider
-import kotlinx.coroutines.GlobalScope
 import kotlin.collections.ArrayList
 
 class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
@@ -310,7 +305,7 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
                 catId?.let { excludeList.add(it) }
                 selectCategory(excludeList) { c ->
                     if(checkedItem == 0) {
-                        PiwigoData.addPicsToCat(pictures, c) {
+                        PiwigoData.addPicsToCats(pictures, listOf(c)) {
                             activity?.runOnUiThread {
                                 refreshPictures()
                                 actionMode?.finish()
@@ -475,7 +470,7 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
         val filteredTags = PiwigoData.getAllTags().filter { t -> t.name.lowercase().contains(queryLow) }.map { t -> t.tagId }
         val filteredCats = PiwigoData.getAllCategories().filter { c -> c.name.lowercase().contains(queryLow) }.map { c -> c.catId }
 
-        return pics.filter { id ->
+            return pics.filter { id ->
             val pic = PiwigoData.getPictureFromId(id)
             pic != null && (pic.name.lowercase().contains(queryLow) || filteredTags.intersect(pic.getTags().toSet()).isNotEmpty() ||
                 pic.getCategories(recursive = true).intersect(filteredCats.toSet()).isNotEmpty())
@@ -574,16 +569,15 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
 
         fun replaceAll(models: List<Int>) {
 
-            val picsList = mutableListOf<Picture>()
-            models.forEach { m -> PiwigoData.getPictureFromId(m)?.let{ picsList.add(it) } }
+            fragment.activity?.runOnUiThread {
 
-            picsList.sortWith(compareByDescending<Picture>{ it.creationDate }.thenBy{ it.name }.thenBy{ it.picId })
-            fragment.lifecycleScope.launch(Dispatchers.IO) {
-                val groupedList = picsList.groupBy { p ->
-                    p.creationDay
-                }
+                // Create sorted and grouped list
+                val picsList = models.toList().mapNotNull { m -> PiwigoData.getPictureFromId(m) }.toMutableList()
+                picsList.sortWith(compareByDescending<Picture>{ it.creationDate }.thenBy{ it.name }.thenBy{ it.picId })
+                val groupedList = picsList.groupBy { p -> p.creationDay }
+
+                // Create list items
                 val newItems = ArrayList<DataItem>()
-
                 for(i in groupedList.keys){
                     newItems.add(DataItem.Header(i))
                     for(v in groupedList.getValue(i)){
@@ -591,6 +585,7 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
                     }
                 }
 
+                // If selection was ongoing, restore check state of items that existed before
                 newItems.forEach { newItem ->
                     val existing = items.firstOrNull { it is DataItem.PictureItem && it.id == newItem.id }
                     if(existing != null) {
@@ -598,12 +593,11 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
                     }
                 }
 
-                fragment.activity?.runOnUiThread {
-                    items = newItems
-                    updateSections()
-                    fragment.onItemsChanged()
-                    notifyDataSetChanged()
-                }
+                // Update list
+                items = newItems
+                updateSections()
+                fragment.onItemsChanged()
+                notifyDataSetChanged()
             }
         }
 
