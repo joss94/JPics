@@ -43,7 +43,7 @@ class ExplorerFragment (private var startCat: Int? = null) :
 
     private var imagesListFragment: ImageListFragment = ImageListFragment(startCat)
 
-    var currentCategory: Int = 0
+    private var currentCategory: Int = 0
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_explorer, container, false)
@@ -207,7 +207,7 @@ class ExplorerFragment (private var startCat: Int? = null) :
             albumPathLayout.visibility = if(PiwigoData.getCategoryFromId(cat.parentId) == null) View.GONE else View.VISIBLE
 
             albumPathLayout.removeAllViews()
-            val parents = cat.getHierarchy()
+            val parents = cat.getHierarchy().reversed()
             for(i in parents.indices) {
                 val p = parents[i]
                 val isLast = i == parents.size - 1

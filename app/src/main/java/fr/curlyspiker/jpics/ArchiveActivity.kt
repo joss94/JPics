@@ -14,11 +14,8 @@ class ArchiveActivity : AppCompatActivity() {
         val fragmentManager = supportFragmentManager
         val transaction = fragmentManager.beginTransaction()
 
-        val cat = PiwigoData.getArchiveCat()
-        val imagesListFragment = ImageListFragment(cat)
+        val imagesListFragment = ImageListFragment(null, isArchive = true)
         transaction.replace(R.id.image_list_fragment, imagesListFragment)
         transaction.commitAllowingStateLoss()
-
-        imagesListFragment.onImagesReady(cat)
     }
 }

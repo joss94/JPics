@@ -8,7 +8,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
-import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.text.InputType
@@ -20,13 +19,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import androidx.core.view.isVisible
 import androidx.viewpager.widget.PagerAdapter
 import androidx.viewpager.widget.ViewPager
-import com.google.android.exoplayer2.ExoPlayer
-import com.google.android.exoplayer2.MediaItem
-import com.google.android.exoplayer2.Player
-import com.google.android.exoplayer2.ui.StyledPlayerView
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.squareup.picasso.Picasso
 import java.io.File
@@ -66,7 +60,7 @@ class ImageViewerActivity : AppCompatActivity() {
         catId = savedInstanceState?.getInt("cat_id") ?: intent.getIntExtra("cat_id", -1)
         currentPicId = savedInstanceState?.getInt("img_id") ?: intent.getIntExtra("img_id", 0)
 
-        pagerAdapter = ImageViewerPager(this, this)
+        pagerAdapter = ImageViewerPager(this)
         pager.adapter = pagerAdapter
         pagerAdapter.pictures = PiwigoData.currentlyDisplayedList.toList()
 
@@ -122,11 +116,9 @@ class ImageViewerActivity : AppCompatActivity() {
 
         infoDialog.findViewById<ImageButton>(R.id.pic_info_edit_keywords)?.setOnClickListener {
             val dialog = TagEditor(this) { tags ->
-                val newTags = tags.filter { t -> t.id == -1 }
+                val newTags = tags.filter { t -> t.tagId == -1 }
                 PiwigoData.addTags(newTags) {
-                    val tagIds = mutableListOf<Int>()
-                    tags.forEach { t -> tagIds.add(PiwigoData.tags.values.firstOrNull { it.name == t.name }?.id ?: -1) }
-
+                    val tagIds = tags.mapNotNull { t ->  PiwigoData.getTagFromName(t.name)?.tagId }
                     PiwigoData.setPicTags(currentPicId, tagIds) {
                         updateBottomSheet()
                     }
@@ -192,12 +184,12 @@ class ImageViewerActivity : AppCompatActivity() {
 
                 infoSize.text = getString(R.string.size_info).format(info.optString("width", "0").toInt(), info.optString("height", "0").toInt())
 
-                infoAddedBy.text = PiwigoData.users[info.optString("added_by", "-1").toInt()]?.username
+                infoAddedBy.text = PiwigoData.getUserFromId(info.optString("added_by", "-1").toInt())?.username
 
                 val tags = currentPic().getTags()
                 var tagsTxt = ""
                 tags.forEach { t ->
-                    tagsTxt += PiwigoData.tags[t]?.name + " - "
+                    tagsTxt += PiwigoData.getTagFromId(t)?.name + " - "
                 }
                 infoTags.text = if(tagsTxt.isEmpty()) "None" else tagsTxt.subSequence(0, tagsTxt.length - 3)
             }
@@ -300,7 +292,7 @@ class ImageViewerActivity : AppCompatActivity() {
             .setTitle("Delete image")
             .setMessage("Are you sure you want to delete this image?")
             .setIcon(android.R.drawable.ic_dialog_alert)
-            .setPositiveButton("Yes") { _, _ -> PiwigoData.archivePictures(listOf(picture)) { finish() } }
+            .setPositiveButton("Yes") { _, _ -> PiwigoData.archivePictures(listOf(picture), true) { finish() } }
             .setNegativeButton("Cancel", null).show()
     }
 
@@ -319,7 +311,7 @@ class ImageViewerActivity : AppCompatActivity() {
         outState.putInt("img_id", currentPicId)
     }
 
-    class ImageViewerPager (private val mContext: Context, private val mActivity: ImageViewerActivity) : PagerAdapter() {
+    class ImageViewerPager (private val mContext: Context) : PagerAdapter() {
 
         var pictures: List<Int> = listOf()
             set(value) {

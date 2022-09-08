@@ -46,14 +46,13 @@ class TagEditor(context: Context, val callback: (List<PicTag>) -> Unit) : Dialog
         tagsView.adapter  = tagsAdapter
 
         tagTextView = findViewById(R.id.tag_text_view)
-        val tagsNames = mutableListOf<String>()
-        PiwigoData.tags.values.forEach { t -> tagsNames.add(t.name) }
+        val tagsNames =  PiwigoData.getAllTags().map { t -> t.name }
         val adapter: ArrayAdapter<String> = ArrayAdapter<String>(context, android.R.layout.simple_dropdown_item_1line, tagsNames)
         tagTextView.setAdapter(adapter)
         findViewById<Button>(R.id.tag_edit_text_ok_button).setOnClickListener {
             val tagName = tagTextView.text.toString()
             if(tags.firstOrNull { t -> t.name == tagName } == null) {
-                tags.add(PicTag(PiwigoData.tags.values.firstOrNull { it.name == tagName }?.id ?: -1, tagName))
+                tags.add(PicTag(PiwigoData.getTagFromName(tagName)?.tagId ?: -1, tagName))
                 tagsAdapter.setTags(tags)
             }
             tagTextView.setText("")
@@ -71,7 +70,7 @@ class TagEditor(context: Context, val callback: (List<PicTag>) -> Unit) : Dialog
     }
 
     fun setTags(t: List<Int>) {
-        tags = PiwigoData.tags.values.filter { t.contains(it.id) }.toMutableList()
+        tags = PiwigoData.getAllTags().filter { t.contains(it.tagId) }.toMutableList()
         if(this::tagsAdapter.isInitialized) {
             tagsAdapter.setTags(tags)
         }

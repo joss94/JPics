@@ -87,7 +87,7 @@ class MainActivity : BaseActivity() {
             requestPermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
 
-        PiwigoData.refreshEverything {  }
+        PiwigoData.refreshEverything ()
 
         when {
             intent?.action == Intent.ACTION_SEND -> {
@@ -117,32 +117,7 @@ class MainActivity : BaseActivity() {
                 .setPositiveButton("Yes") { _, _ ->
                     val dialog = CategoryPicker(this)
                     dialog.setOnCategorySelectedCallback { c ->
-                        val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                            val source = ImageDecoder.createSource(contentResolver, uri)
-                            ImageDecoder.decodeBitmap(source)
-                        } else {
-                            MediaStore.Images.Media.getBitmap(contentResolver, uri)
-                        }
-
-                        var filename = ""
-                        var date = Calendar.getInstance().time.time
-
-                        val cursor = contentResolver.query(uri, null, null, null, null)
-                        if(cursor != null) {
-                            cursor.moveToFirst()
-
-                            try {
-                                val dateIndex: Int = cursor.getColumnIndexOrThrow("last_modified")
-                                date = cursor.getString(dateIndex).toLong()
-                            } catch (e: Exception) {}
-
-                            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                            filename = cursor.getString(nameIndex)
-
-                            cursor.close()
-                        }
-
-                        PiwigoData.addImages(listOf(PiwigoAPI.ImageUploadData(bitmap, filename, Date(date))), listOf(c), listener = object: PiwigoData.ProgressListener {
+                         PiwigoData.addImages(listOf(uri), contentResolver, listOf(c), listener = object: PiwigoData.ProgressListener {
                             override fun onStarted() {}
                             override fun onProgress(progress: Float) {}
                             override fun onCompleted() {
@@ -168,42 +143,8 @@ class MainActivity : BaseActivity() {
             .setPositiveButton("Yes") { _, _ ->
                 val dialog = CategoryPicker(this)
                 dialog.setOnCategorySelectedCallback { c ->
-                    val images = mutableListOf<PiwigoAPI.ImageUploadData>()
-                    intent.getParcelableArrayListExtra<Parcelable>(Intent.EXTRA_STREAM)?.let {
-                        it.forEach { parcelable ->
-                            val uri = parcelable as Uri
-                            Log.d("TAG", "Received image: $uri")
-
-                            val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                                val source = ImageDecoder.createSource(contentResolver, uri)
-                                ImageDecoder.decodeBitmap(source)
-                            } else {
-                                MediaStore.Images.Media.getBitmap(contentResolver, uri)
-                            }
-
-                            var filename = ""
-                            var date = Calendar.getInstance().time.time
-
-                            val cursor = contentResolver.query(uri, null, null, null, null)
-                            if(cursor != null) {
-                                cursor.moveToFirst()
-
-                                try {
-                                    val dateIndex: Int = cursor.getColumnIndexOrThrow("last_modified")
-                                    date = cursor.getString(dateIndex).toLong()
-                                } catch (e: Exception) {}
-
-
-                                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                                filename = cursor.getString(nameIndex)
-
-                                cursor.close()
-                            }
-                            images.add(PiwigoAPI.ImageUploadData(bitmap, filename, Date(date)))
-                        }
-                    }
-
-                    PiwigoData.addImages(images, listOf(c), listener = object : PiwigoData.ProgressListener {
+                    val uris = intent.getParcelableArrayListExtra<Parcelable>(Intent.EXTRA_STREAM)?.map { it -> it as Uri } ?: listOf()
+                    PiwigoData.addImages(uris, contentResolver, listOf(c), listener = object : PiwigoData.ProgressListener {
                         override fun onStarted() {}
                         override fun onProgress(progress: Float) {}
                         override fun onCompleted() {

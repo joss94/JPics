@@ -151,12 +151,9 @@ class InstantUploadManager private constructor(val context: Context) {
                         Log.d("IU", "Syncing $path")
 
                         val file = File(path)
-                        val filename = Paths.get(path).fileName.toString()
                         val createdTime = file.lastModified()
-                        val bmp = BitmapFactory.decodeFile(path)
 
-                        val imgData = PiwigoAPI.ImageUploadData(bmp, filename, Date(createdTime))
-                        PiwigoData.addImages(listOf(imgData), listOf(instantUploadCat), listener = object : PiwigoData.ProgressListener{
+                        PiwigoData.addImages(listOf(Uri.parse(path)), context.contentResolver, listOf(instantUploadCat), listener = object : PiwigoData.ProgressListener{
                             override fun onStarted() {}
 
                             override fun onCompleted() {

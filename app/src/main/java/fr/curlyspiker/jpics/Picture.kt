@@ -27,20 +27,19 @@ data class Picture (
     var largeResUrl: String = ""
     var elementUrl: String = ""
 
-    @Ignore
     var creationDate: Date = Date()
         set(value) {
             field = value
             val cal = Calendar.getInstance()
             cal.time = field
             cal.set(Calendar.HOUR, 0)
+            cal.set(Calendar.HOUR_OF_DAY, 0)
             cal.set(Calendar.MINUTE, 0)
             cal.set(Calendar.SECOND, 0)
             cal.set(Calendar.MILLISECOND, 0)
             creationDay = cal.time
         }
 
-    @Ignore
     var creationDay: Date = Date()
 
     var isArchived = false
@@ -85,20 +84,18 @@ data class Picture (
     }
 
     fun getTags() : List<Int> {
-        val out = mutableListOf<Int>()
-        PiwigoData.picturesTags.filter{ pair -> pair.first == picId}.forEach { pair -> out.add(pair.second) }
-        return out
+        return DatabaseProvider.db.PictureTagDao().getTagsFromPicture(picId)
     }
 
     fun getCategories(recursive: Boolean = false) : List<Int> {
 
         val out = mutableListOf<Int>()
         val directParents = DatabaseProvider.db.PictureCategoryDao().getParentsIds(picId)
-        for (parent in directParents) {
-            out.add(parent)
+        for (cat in directParents) {
+            out.add(cat)
 
             if(recursive) {
-                val parents = PiwigoData.getCategoryFromId(parent)?.getHierarchy()
+                val parents = PiwigoData.getCategoryFromId(cat)?.getHierarchy()
                 parents?.forEach { parent ->
                     if (!out.contains(parent)) {
                         out.add(parent)
@@ -155,6 +152,7 @@ data class Picture (
             p.thumbnailUrl = derivatives?.optJSONObject("thumb")?.optString("url")?:""
             p.largeResUrl = derivatives?.optJSONObject("xxlarge")?.optString("url")?:""
             p.elementUrl = json.optString("element_url")
+            p.isArchived = json.optBoolean("is_archived", false)
 
             val creationString = json.optString("date_creation", "")
             val format = SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
@@ -163,7 +161,6 @@ data class Picture (
             } catch (e: java.lang.Exception) {}
 
             p.mInfo = json
-            p.isArchived = p.getCategoriesFromInfoJson().contains(PiwigoData.getArchiveCat())
 
             return p
         }
@@ -173,3 +170,8 @@ data class Picture (
 @Entity(primaryKeys = ["picId", "catId"], tableName = "picture_category_cross_ref")
 data class PictureCategoryCrossRef (val picId: Int,
                                     val catId: Int)
+
+
+@Entity(primaryKeys = ["picId", "tagId"], tableName = "picture_tag_cross_ref")
+data class PictureTagCrossRef (val picId: Int,
+                                    val tagId: Int)

@@ -1,3 +1,9 @@
 package fr.curlyspiker.jpics
 
-class PicTag(var id : Int, var name : String)
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+@Entity(tableName = "tag")
+data class PicTag(
+    @PrimaryKey var tagId : Int,
+    var name : String)

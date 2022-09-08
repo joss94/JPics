@@ -1,6 +1,10 @@
 package fr.curlyspiker.jpics
 
-class User(val id: Int, val username: String) {
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+@Entity
+data class User(@PrimaryKey val userId: Int, val username: String) {
     var email: String = ""
     var status = ""
 }

@@ -1,9 +1,7 @@
 package fr.curlyspiker.jpics
 
 import android.util.Log
-import com.android.volley.Request
 import com.android.volley.RequestQueue
-import com.android.volley.toolbox.JsonObjectRequest
 import com.android.volley.toolbox.StringRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
@@ -11,7 +9,6 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
-import java.lang.Exception
 import java.net.CookieHandler
 import java.net.CookieManager
 import java.net.URLEncoder
@@ -27,25 +24,6 @@ object PiwigoServerHelper {
             CookieHandler.setDefault(CookieManager())
             requestQueue = queue
         }
-    }
-
-    fun volleyGet(command: String, cb : (JSONObject) -> Unit) {
-        val url = "${serverUrl}/ws.php?format=json&method=$command"
-        val req = JsonObjectRequest (
-            Request.Method.GET, url, null,
-            { response ->
-                GlobalScope.launch(Dispatchers.IO) {
-                    try {
-                        cb(response)
-                    } catch (e: JSONException) {
-                        e.printStackTrace()
-                    }
-                }
-            },
-            { error -> error.printStackTrace() }
-        )
-
-        requestQueue.add(req)
     }
 
     fun volleyPost(params: JSONObject, cb : (JSONObject) -> Unit) {
@@ -71,7 +49,7 @@ object PiwigoServerHelper {
                         }
                     } catch (e: JSONException) {
                         cb(JSONObject())
-                        Log.d("PSH", "Problem parsing response ${response}")
+                        Log.d("PSH", "Problem parsing response: $response")
                         Log.d("PSH", e.toString())
                     }
                 }

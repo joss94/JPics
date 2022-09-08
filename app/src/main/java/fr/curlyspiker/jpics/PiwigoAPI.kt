@@ -1,22 +1,20 @@
 package fr.curlyspiker.jpics
 
 import android.graphics.Bitmap
-import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
 
 object PiwigoAPI {
+
     class ImageUploadData (
         val bmp: Bitmap,
         val filename: String,
         val date: Date,
         val author: String = "unknown",
         val creationDate: Date = Date(),
-        val comment: String = "") {
-
-    }
+        val comment: String = "")
 
     fun pwgImagesGetInfo(id: Int, cb : (Boolean, JSONObject) -> Unit) {
         val req = JSONObject()
@@ -83,8 +81,7 @@ object PiwigoAPI {
         req.put("status", if (isPublic) "public" else "private")
 
         PiwigoServerHelper.volleyPost(req) { rsp ->
-            val id = rsp.optInt("id")
-            cb(true, id, rsp) //TODO: Build correct reply
+            cb(true, rsp.optInt("id", 0), rsp)
         }
     }
 
@@ -144,7 +141,7 @@ object PiwigoAPI {
         req.put("image_id", imageId)
 
         PiwigoServerHelper.volleyPost(req) { rsp ->
-            cb(true, rsp) //TODO: Build correct reply
+            cb(true, rsp)
         }
     }
 
@@ -223,7 +220,7 @@ object PiwigoAPI {
         req.put("tag_ids", tagsList)
 
         PiwigoServerHelper.volleyPost(req) { rsp ->
-            cb(true, rsp.optInt("image_id", 0), rsp) //TODO: Build correct reply
+            cb(true, rsp.optInt("image_id", 0), rsp)
         }
     }
 

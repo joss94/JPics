@@ -48,15 +48,13 @@ data class Category (
         return DatabaseProvider.db.CategoryDao().findCategoryChildren(catId)
     }
 
-    fun getPictures(recursive: Boolean = false, getArchived: Boolean = false) : List<Int>  {
+    fun getPictures(recursive: Boolean = false) : List<Int>  {
 
         val out = mutableListOf<Int>()
-        DatabaseProvider.db.PictureCategoryDao().getPicturesIds(catId).forEach {
-            out.add(it)
-        }
+        out.addAll(DatabaseProvider.db.PictureCategoryDao().getPicturesIds(catId))
 
         if(recursive) {
-            getChildren().forEach { out.addAll(PiwigoData.getCategoryFromId(it)?.getPictures(recursive, getArchived) ?: listOf()) }
+            getChildren().forEach { out.addAll(PiwigoData.getCategoryFromId(it)?.getPictures(recursive) ?: listOf()) }
         }
         return out
     }
