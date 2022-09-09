@@ -1,10 +1,14 @@
 package fr.curlyspiker.jpics
 
 import android.graphics.Bitmap
+import android.util.Log
+import kotlinx.coroutines.coroutineScope
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.coroutines.coroutineContext
+import kotlin.coroutines.suspendCoroutine
 
 object PiwigoAPI {
 
@@ -16,18 +20,16 @@ object PiwigoAPI {
         val creationDate: Date = Date(),
         val comment: String = "")
 
-    fun pwgImagesGetInfo(id: Int, cb : (Boolean, JSONObject) -> Unit) {
+    suspend fun pwgImagesGetInfo(id: Int) : JSONObject {
         val req = JSONObject()
 
         req.put("method", "pwg.images.getInfo")
         req.put("image_id", id)
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            cb(true, rsp)
-        }
+        return PiwigoServerHelper.volleyPost(req)
     }
 
-    fun pwgCategoriesGetImages(cats: List<Int>?, page: Int, perPage: Int, order: String, cb : (Boolean, List<Picture>) -> Unit) {
+    suspend fun pwgCategoriesGetImages(cats: List<Int>?, page: Int, perPage: Int, order: String): List<Picture> {
         val req = JSONObject()
 
         req.put("method", "pwg.categories.getImages")
@@ -39,39 +41,36 @@ object PiwigoAPI {
         req.put("per_page", perPage)
         req.put("order", order)
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            val jsonImages = rsp.optJSONArray("images")
-            val images = mutableListOf<Picture>()
-            if (jsonImages != null) {
-                for (i in 0 until jsonImages.length()) {
-                    images.add(Picture.fromJson(jsonImages.getJSONObject(i)))
-                }
+        val rsp = PiwigoServerHelper.volleyPost(req)
+        val jsonImages = rsp.optJSONArray("images")
+        val images = mutableListOf<Picture>()
+        if (jsonImages != null) {
+            for (i in 0 until jsonImages.length()) {
+                images.add(Picture.fromJson(jsonImages.getJSONObject(i)))
             }
-            cb(true, images)
         }
+        return images
     }
 
-    fun pwgCategoriesGetList(recursive: Boolean, cb : (Boolean, List<Category>) -> Unit) {
+    suspend fun pwgCategoriesGetList(recursive: Boolean): List<Category> {
         val req = JSONObject()
 
         req.put("method", "pwg.categories.getList")
         req.put("recursive", recursive)
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            val jsonCats = rsp.optJSONArray("categories")
+        val rsp = PiwigoServerHelper.volleyPost(req)
+        val jsonCats = rsp.optJSONArray("categories")
 
-            val cats = mutableListOf<Category>()
-            if (jsonCats != null) {
-                for (i in 0 until jsonCats.length()) {
-                    cats.add(Category.fromJson(jsonCats.getJSONObject(i)))
-                }
+        val cats = mutableListOf<Category>()
+        if (jsonCats != null) {
+            for (i in 0 until jsonCats.length()) {
+                cats.add(Category.fromJson(jsonCats.getJSONObject(i)))
             }
-
-            cb(true, cats)
         }
+        return cats
     }
 
-    fun pwgCategoriesAdd(name: String, parentId: Int?, isPublic: Boolean, visible: Boolean, cb: (Boolean, Int, JSONObject) -> Unit) {
+    suspend fun pwgCategoriesAdd(name: String, parentId: Int?, isPublic: Boolean, visible: Boolean): Int{
         val req = JSONObject()
 
         req.put("method", "pwg.categories.add")
@@ -80,35 +79,30 @@ object PiwigoAPI {
         req.put("visible", visible)
         req.put("status", if (isPublic) "public" else "private")
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            cb(true, rsp.optInt("id", 0), rsp)
-        }
+        val rsp = PiwigoServerHelper.volleyPost(req)
+        return rsp.optInt("id", 0)
     }
 
-    fun pwgCategoriesDelete(categoryId: Int, pwgToken: String, cb: (Boolean, JSONObject) -> Unit) {
+    suspend fun pwgCategoriesDelete(categoryId: Int, pwgToken: String) {
         val req = JSONObject()
 
         req.put("method", "pwg.categories.delete")
         req.put("category_id", categoryId)
         req.put("pwg_token", pwgToken)
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            cb(true, rsp)
-        }
+        PiwigoServerHelper.volleyPost(req)
     }
 
-    fun pwgCategoriesDeleteRepresentative(categoryId: Int, cb: (Boolean, JSONObject) -> Unit) {
+    suspend fun pwgCategoriesDeleteRepresentative(categoryId: Int) {
         val req = JSONObject()
 
         req.put("method", "pwg.categories.deleteRepresentative")
         req.put("category_id", categoryId)
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            cb(true, rsp) //TODO: Build correct reply
-        }
+        PiwigoServerHelper.volleyPost(req)
     }
 
-    fun pwgCategoriesMove(catId: Int, pwgToken: String, parent: Int, cb: (Boolean, JSONObject) -> Unit) {
+    suspend fun pwgCategoriesMove(catId: Int, pwgToken: String, parent: Int) {
         val req = JSONObject()
 
         req.put("method", "pwg.categories.move")
@@ -116,36 +110,30 @@ object PiwigoAPI {
         req.put("parent", parent)
         req.put("pwg_token", pwgToken)
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            cb(true, rsp)
-        }
+        PiwigoServerHelper.volleyPost(req)
     }
 
-    fun pwgCategoriesSetInfo(catId: Int, name: String, cb: (Boolean, JSONObject) -> Unit) {
+    suspend fun pwgCategoriesSetInfo(catId: Int, name: String) {
         val req = JSONObject()
 
         req.put("method", "pwg.categories.setInfo")
         req.put("category_id", catId)
         req.put("name", name)
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            cb(true, rsp)
-        }
+        PiwigoServerHelper.volleyPost(req)
     }
 
-    fun pwgCategoriesSetRepresentative(categoryId: Int, imageId: Int, cb: (Boolean, JSONObject) -> Unit) {
+    suspend fun pwgCategoriesSetRepresentative(categoryId: Int, imageId: Int) {
         val req = JSONObject()
 
         req.put("method", "pwg.categories.setRepresentative")
         req.put("category_id", categoryId)
         req.put("image_id", imageId)
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            cb(true, rsp)
-        }
+        PiwigoServerHelper.volleyPost(req)
     }
 
-    fun pwgImagesAddChunk(data: String, originalSum: String, position: String, cb: (Boolean, JSONObject) -> Unit) {
+    suspend fun pwgImagesAddChunk(data: String, originalSum: String, position: String) {
         val req = JSONObject()
 
         req.put("method", "pwg.images.addChunk")
@@ -153,22 +141,19 @@ object PiwigoAPI {
         req.put("original_sum", originalSum)
         req.put("position", position)
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            cb(true, rsp)
-        }
+        PiwigoServerHelper.volleyPost(req)
     }
 
-    fun pwgImagesCheckUpload(cb: (Boolean, Boolean) -> Unit) {
+    suspend fun pwgImagesCheckUpload(): Boolean {
         val req = JSONObject()
 
         req.put("method", "pwg.images.checkUpload")
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            cb(true, rsp.optBoolean("ready_for_upload", false))
-        }
+        val rsp = PiwigoServerHelper.volleyPost(req)
+        return rsp.optBoolean("ready_for_upload", false)
     }
 
-    fun pwgImagesExist(bytes: List<ByteArray>, cb: (Boolean, List<Int?>) -> Unit) {
+    suspend fun pwgImagesExist(bytes: List<ByteArray>): List<Int?> {
         val req = JSONObject()
 
         req.put("method", "pwg.images.exist")
@@ -183,17 +168,16 @@ object PiwigoAPI {
         }
         req.put("md5sum_list", md5sumListReq)
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            val ids = mutableListOf<Int?>()
-            for (md5 in md5sumList) {
-                val id = rsp.optInt(md5)
-                ids.add(if (id > 0) id else null)
-            }
-            cb(true, ids)
+        val rsp = PiwigoServerHelper.volleyPost(req)
+        val ids = mutableListOf<Int?>()
+        for (md5 in md5sumList) {
+            val id = rsp.optInt(md5)
+            ids.add(if (id > 0) id else null)
         }
+        return ids
     }
 
-    fun pwgImagesAdd(originalSum: String, filename: String, name: String, author: String, dateCreation: Date, comment: String, cats: List<Int>?, tags: List<Int>?, cb: (Boolean, Int, JSONObject) -> Unit) {
+    suspend fun pwgImagesAdd(originalSum: String, filename: String, name: String, author: String, dateCreation: Date, comment: String, cats: List<Int>?, tags: List<Int>?): Int {
         val req = JSONObject()
 
         req.put("method", "pwg.images.add")
@@ -219,32 +203,28 @@ object PiwigoAPI {
         }
         req.put("tag_ids", tagsList)
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            cb(true, rsp.optInt("image_id", 0), rsp)
-        }
+        val rsp = PiwigoServerHelper.volleyPost(req)
+        return rsp.optInt("image_id", 0)
     }
 
-    fun pwgImagesDelete(ids: List<Int>, pwgToken: String, cb: (Boolean, JSONObject) -> Unit) {
+    suspend fun pwgImagesDelete(ids: List<Int>, pwgToken: String) {
         val req = JSONObject()
 
         req.put("method", "pwg.images.delete")
         req.put("image_id", JSONArray(ids))
         req.put("pwg_token", pwgToken)
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            cb(true, rsp)
-        }
+        PiwigoServerHelper.volleyPost(req)
     }
 
-    fun pwgImagesSetInfo(
+    suspend fun pwgImagesSetInfo(
         id: Int,
         name: String? = null,
         creationDate: Date? = null,
         categories: List<Int>? = null,
         tags: List<Int>? = null,
         singleValueMode: String = "fill_if_empty",
-        multipleValueMode: String = "append",
-        cb: (Boolean, JSONObject) -> Unit)
+        multipleValueMode: String = "append")
     {
         val req = JSONObject()
 
@@ -257,42 +237,36 @@ object PiwigoAPI {
         req.put("single_value_mode", singleValueMode)
         req.put("multiple_value_mode", multipleValueMode)
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            cb(true, rsp)
-        }
+        PiwigoServerHelper.volleyPost(req)
     }
 
-    fun pwgJpicsImagesArchive(imageIds: List<Int>, archive: Boolean, cb: (Boolean, JSONObject) -> Unit) {
+    suspend fun pwgJpicsImagesArchive(imageIds: List<Int>, archive: Boolean) {
         val req = JSONObject()
 
         req.put("method", "jpics.images.archive")
         req.put("image_id", JSONArray(imageIds))
         req.put("archive", archive)
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            cb(true, rsp)
-        }
+        PiwigoServerHelper.volleyPost(req)
     }
 
-    fun pwgJpicsImagesMoveToCategory(imageIds: List<Int>, categoryId: Int, cb: (Boolean, JSONObject) -> Unit) {
+    suspend fun pwgJpicsImagesMoveToCategory(imageIds: List<Int>, categoryId: Int) {
         val req = JSONObject()
 
         req.put("method", "jpics.images.moveToCategory")
         req.put("image_id", JSONArray(imageIds))
         req.put("cat_id", categoryId)
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            cb(true, rsp)
-        }
+        PiwigoServerHelper.volleyPost(req)
     }
 
-    fun pwgSessionGetStatus(cb: (String, Boolean, String, List<String>) -> Unit) {
+    suspend fun pwgSessionGetStatus(): JSONObject {
         val req = JSONObject()
 
         req.put("method", "pwg.session.getStatus")
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            val username = rsp.optString("username", "unknown")
+        /*
+        val username = rsp.optString("username", "unknown")
             val isAdmin = rsp.optString("status", "guest") == "admin"
             val token = rsp.optString("pwg_token")
             val sizes = mutableListOf<String>()
@@ -302,84 +276,83 @@ object PiwigoAPI {
                     sizes.add(sizesArray[i].toString())
                 }
             }
-
-            cb(username, isAdmin, token, sizes)
+         */
+        var out = JSONObject()
+        try {
+            out = PiwigoServerHelper.volleyPost(req)
+        } catch (e: Exception) {
+            Log.d("API", "Problem occurred")
         }
+        return out
     }
 
-    fun pwgSessionLogin(username: String, password: String, cb: (Boolean, Boolean, JSONObject) -> Unit) {
+    suspend fun pwgSessionLogin(username: String, password: String,): Boolean {
         val req = JSONObject()
 
         req.put("method", "pwg.session.login")
         req.put("username", username)
         req.put("password", password)
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            val success = rsp.optString("stat", "error") == "ok"
-            var logged = false
-            if (success) {
-                logged = rsp.optBoolean("result")
-            }
-            cb(success, logged, rsp)
+        val rsp = PiwigoServerHelper.volleyPost(req)
+        val success = rsp.optString("stat", "error") == "ok"
+        var logged = false
+        if (success) {
+            logged = rsp.optBoolean("result")
         }
+        return logged
     }
 
-    fun pwgSessionLogout(cb: (Boolean, JSONObject) -> Unit) {
+    suspend fun pwgSessionLogout() {
         val req = JSONObject()
 
         req.put("method", "pwg.session.logout")
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            cb(true, rsp)
-        }
+        PiwigoServerHelper.volleyPost(req)
     }
 
-    fun pwgTagsAdd(tag: PicTag, cb: (Boolean, Int?, JSONObject) -> Unit) {
+    suspend fun pwgTagsAdd(tag: PicTag): Int {
         val req = JSONObject()
 
         req.put("method", "pwg.tags.add")
         req.put("name", tag.name)
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            cb(true, rsp.optInt("id"), rsp)
-        }
+        val rsp = PiwigoServerHelper.volleyPost(req)
+        return rsp.optInt("id")
     }
 
-    fun pwgTagsGetAdminList(cb: (Boolean, List<PicTag>) -> Unit) {
+    suspend fun pwgTagsGetAdminList(): List<PicTag> {
         val req = JSONObject()
 
         req.put("method", "pwg.tags.getAdminList")
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            val tagJson = rsp.optJSONArray("tags")
-            val tags = mutableListOf<PicTag>()
+        val rsp = PiwigoServerHelper.volleyPost(req)
+        val tagJson = rsp.optJSONArray("tags")
+        val tags = mutableListOf<PicTag>()
 
-            if (tagJson != null) {
-                for (i in 0 until tagJson.length()) {
-                    val tag = tagJson.getJSONObject(i)
-                    tags.add(PicTag(tag.getString("id").toInt(), tag.getString("name")))
-                }
+        if (tagJson != null) {
+            for (i in 0 until tagJson.length()) {
+                val tag = tagJson.getJSONObject(i)
+                tags.add(PicTag(tag.getString("id").toInt(), tag.getString("name")))
             }
-            cb(true, tags)
         }
+        return tags
     }
 
-    fun pwgUsersGetList(cb: (Boolean, List<User>, JSONObject) -> Unit) {
+    suspend fun pwgUsersGetList(): List<User> {
         val req = JSONObject()
 
         req.put("method", "pwg.users.getList")
 
-        PiwigoServerHelper.volleyPost(req) { rsp ->
-            val usersJson = rsp.optJSONArray("users")
-            val users = mutableListOf<User>()
-            if (usersJson != null) {
-                for (i in 0 until usersJson.length()) {
-                    val user = usersJson.getJSONObject(i)
-                    users.add(User(user.getInt("id"), user.getString("username")))
-                }
+        val rsp = PiwigoServerHelper.volleyPost(req)
+        val usersJson = rsp.optJSONArray("users")
+        val users = mutableListOf<User>()
+        if (usersJson != null) {
+            for (i in 0 until usersJson.length()) {
+                val user = usersJson.getJSONObject(i)
+                users.add(User(user.getInt("id"), user.getString("username")))
             }
-            cb(true, users, rsp)
         }
+        return users
     }
 
     private fun dateToSqlString(date: Date) : String {

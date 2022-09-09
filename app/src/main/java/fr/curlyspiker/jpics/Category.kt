@@ -14,12 +14,6 @@ data class Category (
 
     var thumbnailId: Int = -1
     var thumbnailUrl: String = ""
-        get() {
-            if (field.isEmpty() && getPictures(recursive = true).isNotEmpty()) {
-                PiwigoData.refreshCategoryRepresentative(catId)
-            }
-            return field
-        }
 
     companion object {
         fun fromJson(json: JSONObject) : Category {

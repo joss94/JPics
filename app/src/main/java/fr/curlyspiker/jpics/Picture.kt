@@ -117,12 +117,16 @@ data class Picture (
 
     fun getInfo(forceRefresh: Boolean = false, cb: (info: JSONObject) -> Unit = {}) {
         if(mInfo == null || forceRefresh) {
+            // TODO: Fix bug
+            /*
             PiwigoAPI.pwgImagesGetInfo(picId) { success, rsp ->
                 if(success) {
                     mInfo = rsp
                 }
                 cb(mInfo ?: JSONObject())
             }
+
+             */
         }
         else cb(mInfo ?: JSONObject())
     }

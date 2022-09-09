@@ -19,10 +19,13 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.viewpager.widget.PagerAdapter
 import androidx.viewpager.widget.ViewPager
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.squareup.picasso.Picasso
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -95,9 +98,11 @@ class ImageViewerActivity : AppCompatActivity() {
 
             builder.setPositiveButton("OK") { dialog, _ ->
                 val name = input.text.toString()
-                PiwigoData.setPicName(currentPicId, name) {
+                lifecycleScope.launch (Dispatchers.IO){
+                    PiwigoData.setPicName(currentPicId, name)
                     updateBottomSheet()
                 }
+
                 dialog.dismiss()
             }
 
@@ -108,7 +113,8 @@ class ImageViewerActivity : AppCompatActivity() {
 
         infoDialog.findViewById<ImageButton>(R.id.pic_info_edit_date)?.setOnClickListener {
             Utils.getDatetime(supportFragmentManager, currentPic().creationDate) { d ->
-                PiwigoData.setPicCreationDate(currentPicId, creationDate = Date(d)) {
+                lifecycleScope.launch (Dispatchers.IO){
+                    PiwigoData.setPicCreationDate(currentPicId, creationDate = Date(d))
                     updateBottomSheet()
                 }
             }
@@ -117,11 +123,11 @@ class ImageViewerActivity : AppCompatActivity() {
         infoDialog.findViewById<ImageButton>(R.id.pic_info_edit_keywords)?.setOnClickListener {
             val dialog = TagEditor(this) { tags ->
                 val newTags = tags.filter { t -> t.tagId == -1 }
-                PiwigoData.addTags(newTags) {
+                lifecycleScope.launch (Dispatchers.IO){
+                    PiwigoData.addTags(newTags)
                     val tagIds = tags.mapNotNull { t ->  PiwigoData.getTagFromName(t.name)?.tagId }
-                    PiwigoData.setPicTags(currentPicId, tagIds) {
-                        updateBottomSheet()
-                    }
+                    PiwigoData.setPicTags(currentPicId, tagIds)
+                    updateBottomSheet()
                 }
             }
 
@@ -266,18 +272,16 @@ class ImageViewerActivity : AppCompatActivity() {
         builder.setPositiveButton("OK") { _, _ ->
             selectCategory { c ->
                 if(checkedItem == 0) {
-                    PiwigoData.addPicsToCats(listOf(picture), listOf(c)) {
-                        runOnUiThread {
-                            pagerAdapter.pictures = PiwigoData.currentlyDisplayedList.toList()
-                            updateBottomSheet()
-                        }
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        PiwigoData.addPicsToCats(listOf(picture), listOf(c))
+                        pagerAdapter.pictures = PiwigoData.currentlyDisplayedList.toList()
+                        updateBottomSheet()
                     }
                 } else {
-                    PiwigoData.movePicsToCat(listOf(picture), c) {
-                        runOnUiThread {
-                            pagerAdapter.pictures = PiwigoData.currentlyDisplayedList.toList()
-                            updateBottomSheet()
-                        }
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        PiwigoData.movePicsToCat(listOf(picture), c)
+                        pagerAdapter.pictures = PiwigoData.currentlyDisplayedList.toList()
+                        updateBottomSheet()
                     }
                 }
             }
@@ -292,7 +296,12 @@ class ImageViewerActivity : AppCompatActivity() {
             .setTitle("Delete image")
             .setMessage("Are you sure you want to delete this image?")
             .setIcon(android.R.drawable.ic_dialog_alert)
-            .setPositiveButton("Yes") { _, _ -> PiwigoData.archivePictures(listOf(picture), true) { finish() } }
+            .setPositiveButton("Yes") { _, _ ->
+                lifecycleScope.launch(Dispatchers.IO) {
+                    PiwigoData.archivePictures(listOf(picture), true)
+                }
+                finish()
+            }
             .setNegativeButton("Cancel", null).show()
     }
 

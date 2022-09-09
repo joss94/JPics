@@ -19,7 +19,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.squareup.picasso.Picasso
@@ -32,10 +31,105 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.core.content.FileProvider
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.*
 import kotlin.collections.ArrayList
+
+class ILFViewModel : ViewModel() {
+
+    private var isArchive: Boolean = false
+    private var catId: Int? = null
+    private val imageList = MutableLiveData<List<Picture>>()
+
+    fun setArchive(isArchive: Boolean) {
+        this.isArchive = isArchive
+    }
+
+    fun setCategory(catId: Int?) {
+        this.catId = catId
+        loadPictures()
+    }
+
+    fun getPictures(): LiveData<List<Picture>> {
+        return imageList
+    }
+
+    fun loadPictures() {
+        val picsIds = mutableListOf<Int>()
+
+        if (isArchive) {
+            picsIds.addAll(DatabaseProvider.db.PictureDao().getArchivedIds())
+        } else {
+            val cat = catId
+            if (cat != null) {
+                picsIds.addAll(PiwigoData.getCategoryFromId(cat)?.getPictures() ?: listOf())
+            }
+            else {
+                picsIds.addAll(DatabaseProvider.db.PictureDao().getAllIds())
+            }
+        }
+
+        val newList = DatabaseProvider.db.PictureDao().loadManyById(picsIds).filterNotNull().sortedWith(compareByDescending<Picture>{ it.creationDate }.thenBy{ it.name })
+        Log.d("ILF", "Loading done!")
+
+        imageList.postValue(newList)
+    }
+
+    fun movePicturesToCategory(pics: List<Int>, cat: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            PiwigoData.movePicsToCat(pics, cat)
+            loadPictures()
+        }
+    }
+
+    fun addPicturesToCategory(pics: List<Int>, cats: List<Int>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            PiwigoData.addPicsToCats(pics, cats)
+        }
+    }
+
+    fun removePicturesFromCategory(pics: List<Int>, cat: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            PiwigoData.removePicsFromCat(pics, cat)
+            loadPictures()
+        }
+    }
+
+    fun archivePictures(pics: List<Int>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            PiwigoData.archivePictures(pics, true)
+            loadPictures()
+        }
+    }
+
+    fun restorePictures(pics: List<Int>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            PiwigoData.restorePictures(pics)
+            loadPictures()
+        }
+    }
+
+    fun deletePictures(pics: List<Int>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            PiwigoData.deleteImages(pics)
+            loadPictures()
+        }
+    }
+
+    fun setImagesCreationDate(pics: List<Int>, creationDate: Date) {
+        viewModelScope.launch(Dispatchers.IO) {
+            pics.forEach { id ->
+                PiwigoData.setPicCreationDate(id, creationDate = creationDate)
+            }
+            loadPictures()
+        }
+    }
+}
 
 class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
     Fragment(), PiwigoDataListener, PiwigoData.ProgressListener {
+
+    private val imageListVM: ILFViewModel by viewModels()
 
     private var actionMode : ActionMode? = null
 
@@ -62,11 +156,6 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
     }
 
     private var catId: Int? = null
-
-    private var pics = mutableListOf<Int>()
-
-    private var filterQuery = ""
-    private var onFilterChanged : () -> Unit = {}
 
     init {
         catId = startCat
@@ -167,13 +256,13 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
 
         PiwigoData.addListener(this)
 
-        onFilterChanged = {
+        imageListVM.setArchive(isArchive)
+        imageListVM.setCategory(catId)
+        imageListVM.getPictures().observe(viewLifecycleOwner) { pictures ->
             lifecycleScope.launch(Dispatchers.IO) {
-                picturesAdapter?.replaceAll(getFilteredPics(filterQuery))
+                picturesAdapter?.replaceAll(pictures)
             }
         }
-
-        onImagesReady(catId)
     }
 
     override fun onDestroyView() {
@@ -189,14 +278,17 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
 
     fun setCategory(c: Int?) {
         catId = c
-        onImagesReady(catId)
+        if(isAdded && context != null) {
+            imageListVM.setCategory(c)
+        }
     }
 
     private fun refreshPictures() {
         InstantUploadManager.getInstance(requireContext()).checkForNewImages()
         activity?.runOnUiThread {
             refreshButton.isEnabled = false
-            PiwigoData.refreshPictures(if(catId != null) listOf(catId!!) else null) { _, _ ->
+            lifecycleScope.launch(Dispatchers.IO) {
+                PiwigoData.refreshPictures(if(catId != null) listOf(catId!!) else null)
                 activity?.runOnUiThread {
                     refreshButton.isEnabled = true
                 }
@@ -271,9 +363,9 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
             onStarted()
             var downloaded = 0
             pictures.forEach { pic ->
-                PiwigoData.getPictureFromId(pic)?.saveToLocal(requireContext(), path) {
+                imageListVM.getPictures().value?.find { p -> p.picId == pic }?.saveToLocal(requireContext(), path) {
                     downloaded += 1
-                    onProgress(downloaded.toFloat() / pics.size)
+                    onProgress(downloaded.toFloat() / pictures.size)
                 }
             }
             activity?.runOnUiThread {
@@ -304,22 +396,14 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
                 val excludeList = mutableListOf<Int>()
                 catId?.let { excludeList.add(it) }
                 selectCategory(excludeList) { c ->
-                    if(checkedItem == 0) {
-                        PiwigoData.addPicsToCats(pictures, listOf(c)) {
-                            activity?.runOnUiThread {
-                                refreshPictures()
-                                actionMode?.finish()
-                            }
+                    if (checkedItem == 0) {
+                        if (checkedItem == 0) {
+                            imageListVM.addPicturesToCategory(pictures, listOf(c))
+                        } else {
+                            imageListVM.movePicturesToCategory(pictures, c)
                         }
-                    } else {
-                        PiwigoData.movePicsToCat(pictures, c) {
-                            activity?.runOnUiThread {
-                                refreshPictures()
-                                actionMode?.finish()
-                            }
-                        }
+                        actionMode?.finish()
                     }
-
                 }
             }
 
@@ -328,10 +412,8 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
 
     private fun removeImagesFromAlbum(pictures: List<Int>) {
         catId?.let { c ->
-            PiwigoData.removePicsFromCat(pictures, c) {
-                refreshPictures()
-                activity?.runOnUiThread{ actionMode?.finish() }
-            }
+            imageListVM.removePicturesFromCategory(pictures, c)
+            actionMode?.finish()
         }
     }
 
@@ -341,11 +423,8 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
             .setMessage("Are you sure you want to delete these images? You will be able to restore them from the archive")
             .setIcon(android.R.drawable.ic_dialog_alert)
             .setPositiveButton("Yes") { _, _ ->
-                PiwigoData.archivePictures(pictures, true) {
-                    activity?.runOnUiThread {
-                        actionMode?.finish()
-                    }
-                }
+                imageListVM.archivePictures(pictures)
+                actionMode?.finish()
             }
             .setNegativeButton("Cancel", null).show()
     }
@@ -356,11 +435,8 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
             .setMessage("Are you sure you want to delete these images? This will be definitive !")
             .setIcon(android.R.drawable.ic_dialog_alert)
             .setPositiveButton("Yes") { _, _ ->
-                PiwigoData.deleteImages(pictures) {
-                    activity?.runOnUiThread {
-                        actionMode?.finish()
-                    }
-                }
+                imageListVM.deletePictures(pictures)
+                activity?.runOnUiThread { actionMode?.finish() }
             }
             .setNegativeButton("Cancel", null).show()
     }
@@ -370,11 +446,9 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
             .setTitle("Restore images")
             .setMessage("Are you sure you want to restore these images?")
             .setIcon(android.R.drawable.ic_dialog_alert)
-            .setPositiveButton("Yes") { _, _ -> PiwigoData.restorePictures(pictures) {
-                    activity?.runOnUiThread {
-                        actionMode?.finish()
-                    }
-                }
+            .setPositiveButton("Yes") { _, _ ->
+                imageListVM.restorePictures(pictures)
+                activity?.runOnUiThread { actionMode?.finish() }
             }
             .setNegativeButton("Cancel", null).show()
     }
@@ -426,26 +500,14 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
                 }
                 override fun onPrepareLoad(placeHolderDrawable: Drawable?) {}
             }
-            Picasso.with(requireContext()).load(PiwigoData.getPictureFromId(p)?.largeResUrl).into(target)
+            Picasso.with(requireContext()).load(imageListVM.getPictures().value?.find { pic -> pic.picId == p}?.largeResUrl).into(target)
         }
     }
 
     private fun editImagesCreationDate(pictures: List<Int>) {
-        fun setPictureCreationDate(index: Int, creationDate: Long) {
-            if(index >= pictures.size) {
-                refreshPictures()
-                onCompleted()
-                return
-            }
-            onProgress(index.toFloat() / pictures.size)
-            PiwigoData.setPicCreationDate(pictures[index], creationDate = Date(creationDate))  {
-                setPictureCreationDate(index + 1, creationDate)
-            }
-        }
         val date = Date()
         Utils.getDatetime(parentFragmentManager, date) {
-            onStarted()
-            setPictureCreationDate(0, it)
+            imageListVM.setImagesCreationDate(pictures, Date(it))
         }
 
         actionMode?.finish()
@@ -459,46 +521,12 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
     }
 
     fun setFilter(query: String) {
-        filterQuery = query
-        onFilterChanged()
-    }
-
-    private fun getFilteredPics(query: String) : List<Int> {
-        if(query.isEmpty()) { return pics }
-
-        val queryLow = query.lowercase()
-        val filteredTags = PiwigoData.getAllTags().filter { t -> t.name.lowercase().contains(queryLow) }.map { t -> t.tagId }
-        val filteredCats = PiwigoData.getAllCategories().filter { c -> c.name.lowercase().contains(queryLow) }.map { c -> c.catId }
-
-            return pics.filter { id ->
-            val pic = PiwigoData.getPictureFromId(id)
-            pic != null && (pic.name.lowercase().contains(queryLow) || filteredTags.intersect(pic.getTags().toSet()).isNotEmpty() ||
-                pic.getCategories(recursive = true).intersect(filteredCats.toSet()).isNotEmpty())
-        }
+        picturesAdapter?.applyFilter(query)
     }
 
     override fun onImagesReady(catId: Int?) {
         if(this.catId == null || this.catId == catId || catId == null) {
-            pics.clear()
-
-            if (isArchive) {
-                pics.addAll(DatabaseProvider.db.PictureDao().getArchivedIds())
-            } else {
-                if (catId != null) {
-                    pics.addAll(PiwigoData.getCategoryFromId(catId)?.getPictures() ?: listOf())
-                }
-
-                else if (this.catId != null) {
-                    pics.addAll(PiwigoData.getCategoryFromId(this.catId!!)?.getPictures() ?: listOf())
-                }
-
-                else {
-                    pics.addAll(DatabaseProvider.db.PictureDao().getAllIds())
-                }
-            }
-
-
-            onFilterChanged()
+            imageListVM.loadPictures()
         }
     }
 
@@ -513,13 +541,10 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
         private val ITEM_VIEW_TYPE_ITEM = -2
 
         sealed class DataItem {
-            data class PictureItem(val picId: Int) : DataItem() {
-                override val id = picId.toLong()
-                override val creationDay = picture()?.creationDay ?: Date()
+            data class PictureItem(val picture: Picture) : DataItem() {
+                override val id = picture.picId.toLong()
+                override val creationDay = picture.creationDay
                 var checked = false
-                fun picture() : Picture? {
-                    return PiwigoData.getPictureFromId(id.toInt())
-                }
             }
 
             data class Header(override val creationDay: Date): DataItem() {
@@ -543,6 +568,9 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
         private var sections: MutableList<Date> = mutableListOf()
 
         private var items = listOf<DataItem>()
+        private var pictures = listOf<Picture>()
+        private var filteredPictures = listOf<Picture>()
+        private var filterQuery: String = ""
 
         fun isHeader(pos: Int) : Boolean {
             return items[pos] is DataItem.Header
@@ -552,7 +580,7 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
             PiwigoData.currentlyDisplayedList.clear()
             items.forEach { i ->
                 if(i is DataItem.PictureItem) {
-                    PiwigoData.currentlyDisplayedList.add(i.picId)
+                    PiwigoData.currentlyDisplayedList.add(i.picture.picId)
                 }
             }
 
@@ -563,41 +591,59 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
 
         fun getSelectedPictures() : List<Int> {
             val selectedPictures = mutableListOf<Int>()
-            items.filter { i -> i is DataItem.PictureItem && i.checked }.forEach { selectedPictures.add((it as DataItem.PictureItem).picId) }
+            items.filter { i -> i is DataItem.PictureItem && i.checked }.forEach { selectedPictures.add((it as DataItem.PictureItem).picture.picId) }
             return selectedPictures
         }
 
-        fun replaceAll(models: List<Int>) {
+        fun replaceAll(picsList: List<Picture>) {
+            pictures = picsList
+            applyFilter(filterQuery)
+        }
 
-            fragment.activity?.runOnUiThread {
+        fun applyFilter(query: String) {
+            fragment.lifecycleScope.launch(Dispatchers.IO) {
+                filterQuery = query
+                filteredPictures = pictures
+                Log.d("ILF", "0")
 
-                // Create sorted and grouped list
-                val picsList = models.toList().mapNotNull { m -> PiwigoData.getPictureFromId(m) }.toMutableList()
-                picsList.sortWith(compareByDescending<Picture>{ it.creationDate }.thenBy{ it.name }.thenBy{ it.picId })
-                val groupedList = picsList.groupBy { p -> p.creationDay }
+                if(filterQuery.isNotEmpty()) {
+                    val queryLow = filterQuery.lowercase()
+                    val filteredTags =
+                        PiwigoData.getAllTags().filter { t -> t.name.lowercase().contains(queryLow) }
+                            .map { t -> t.tagId }
+                    val filteredCats = PiwigoData.getAllCategories()
+                        .filter { c -> c.name.lowercase().contains(queryLow) }.map { c -> c.catId }
 
+                    filteredPictures = pictures.filter { pic ->
+                        pic.name.lowercase().contains(queryLow) || filteredTags.intersect(pic.getTags().toSet()).isNotEmpty() ||
+                                pic.getCategories(recursive = true).intersect(filteredCats.toSet()).isNotEmpty()
+                    }
+                }
+
+                val groupedList = filteredPictures.groupBy { p -> p.creationDay }
+
+                Log.d("ILF", "1")
                 // Create list items
-                val newItems = ArrayList<DataItem>()
+                val selected = getSelectedPictures()
+
+                val newItems = mutableListOf<DataItem>()
                 for(i in groupedList.keys){
                     newItems.add(DataItem.Header(i))
                     for(v in groupedList.getValue(i)){
-                        newItems.add(DataItem.PictureItem(v.picId))
+                        val item = DataItem.PictureItem(v)
+                        item.checked = selected.contains(v.picId)
+                        newItems.add(item)
                     }
                 }
 
-                // If selection was ongoing, restore check state of items that existed before
-                newItems.forEach { newItem ->
-                    val existing = items.firstOrNull { it is DataItem.PictureItem && it.id == newItem.id }
-                    if(existing != null) {
-                        (newItem as DataItem.PictureItem).checked = (existing as DataItem.PictureItem).checked
-                    }
-                }
-
+                Log.d("ILF", "3")
                 // Update list
-                items = newItems
-                updateSections()
-                fragment.onItemsChanged()
-                notifyDataSetChanged()
+                fragment.activity?.runOnUiThread {
+                    items = newItems
+                    updateSections()
+                    fragment.onItemsChanged()
+                    notifyDataSetChanged()
+                }
             }
         }
 
@@ -668,7 +714,7 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
             when (holder) {
                 is PicViewHolder -> {
                     val p = items[p0] as DataItem.PictureItem
-                    Picasso.with(mContext).load(p.picture()?.thumbnailUrl).into(holder.icon)
+                    Picasso.with(mContext).load(p.picture.thumbnailUrl).into(holder.icon)
 
                     val tile = holder.tile
                     val icon = holder.icon
@@ -754,7 +800,7 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
 
         override fun getSectionForPosition(p0: Int): Int {
             val sections = sections
-            val picDate = (items[p0] as DataItem.PictureItem).picture()?.creationDay
+            val picDate = (items[p0] as DataItem.PictureItem).picture.creationDay
             return sections.indexOfFirst { s -> s <= picDate }
         }
 
@@ -763,5 +809,4 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
             return simpleDate.format(items[position].creationDay)
         }
     }
-
 }

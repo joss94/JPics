@@ -17,8 +17,11 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.work.*
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.util.*
 import java.util.concurrent.TimeUnit
 
@@ -87,7 +90,9 @@ class MainActivity : BaseActivity() {
             requestPermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
 
-        PiwigoData.refreshEverything ()
+        lifecycleScope.launch(Dispatchers.IO) {
+            PiwigoData.refreshEverything ()
+        }
 
         when {
             intent?.action == Intent.ACTION_SEND -> {
@@ -117,13 +122,15 @@ class MainActivity : BaseActivity() {
                 .setPositiveButton("Yes") { _, _ ->
                     val dialog = CategoryPicker(this)
                     dialog.setOnCategorySelectedCallback { c ->
-                         PiwigoData.addImages(listOf(uri), contentResolver, listOf(c), listener = object: PiwigoData.ProgressListener {
-                            override fun onStarted() {}
-                            override fun onProgress(progress: Float) {}
-                            override fun onCompleted() {
-                                finish()
-                            }
-                        })
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            PiwigoData.addImages(listOf(uri), contentResolver, listOf(c), listener = object: PiwigoData.ProgressListener {
+                                override fun onStarted() {}
+                                override fun onProgress(progress: Float) {}
+                                override fun onCompleted() {
+                                    finish()
+                                }
+                            })
+                        }
                     }
                     dialog.show()
                 }
@@ -144,14 +151,15 @@ class MainActivity : BaseActivity() {
                 val dialog = CategoryPicker(this)
                 dialog.setOnCategorySelectedCallback { c ->
                     val uris = intent.getParcelableArrayListExtra<Parcelable>(Intent.EXTRA_STREAM)?.map { it -> it as Uri } ?: listOf()
-                    PiwigoData.addImages(uris, contentResolver, listOf(c), listener = object : PiwigoData.ProgressListener {
-                        override fun onStarted() {}
-                        override fun onProgress(progress: Float) {}
-                        override fun onCompleted() {
-                            finish()
-                        }
-                    })
-
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        PiwigoData.addImages(uris, contentResolver, listOf(c), listener = object : PiwigoData.ProgressListener {
+                            override fun onStarted() {}
+                            override fun onProgress(progress: Float) {}
+                            override fun onCompleted() {
+                                finish()
+                            }
+                        })
+                    }
                 }
                 dialog.show()
             }

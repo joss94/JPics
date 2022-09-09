@@ -14,10 +14,13 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.squareup.picasso.Picasso
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class ExplorerFragment (private var startCat: Int? = null) :
     Fragment(),
@@ -73,7 +76,8 @@ class ExplorerFragment (private var startCat: Int? = null) :
         }
 
         albumEditConfirmButton.setOnClickListener {
-            PiwigoData.setCategoryName(currentCategory, albumTitleEdit.text.toString()) {
+            lifecycleScope.launch(Dispatchers.IO) {
+                PiwigoData.setCategoryName(currentCategory, albumTitleEdit.text.toString())
                 requireActivity().runOnUiThread {
                     setAlbumTitleEditMode(false)
                     updateViews()
@@ -196,7 +200,9 @@ class ExplorerFragment (private var startCat: Int? = null) :
             swipeContainer.isRefreshing = true
             swipeContainer.visibility = View.VISIBLE
         }
-        PiwigoData.refreshCategories {}
+        lifecycleScope.launch(Dispatchers.IO) {
+            PiwigoData.refreshCategories()
+        }
     }
 
     private fun updateViews() {
@@ -253,9 +259,11 @@ class ExplorerFragment (private var startCat: Int? = null) :
 
         builder.setPositiveButton("OK") { dialog, _ ->
             val name = input.text.toString()
-            PiwigoData.addCategory(name, getCurrentCat()?.catId ) {
+            lifecycleScope.launch(Dispatchers.IO) {
+                PiwigoData.addCategory(name, getCurrentCat()?.catId )
                 refreshCategories()
             }
+
             dialog.dismiss()
         }
 
@@ -271,7 +279,12 @@ class ExplorerFragment (private var startCat: Int? = null) :
                 .setTitle("Delete categories")
                 .setMessage("Are you sure you want to delete these categories?")
                 .setIcon(android.R.drawable.ic_dialog_alert)
-                .setPositiveButton("Yes") { _, _ -> PiwigoData.deleteCategories(selectedCategories, this) }
+                .setPositiveButton("Yes") { _, _ ->
+                    val progressListener = this
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        PiwigoData.deleteCategories(selectedCategories, progressListener)
+                    }
+                }
                 .setNegativeButton("Cancel", null)
                 .show()
         }
@@ -284,7 +297,10 @@ class ExplorerFragment (private var startCat: Int? = null) :
             excludeList.add(currentCategory)
             selectCategory(excludeList) { c ->
                 c?.let {
-                    PiwigoData.moveCategories(selectedCategories, c, this)
+                    val progressListener = this
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        PiwigoData.moveCategories(selectedCategories, c, progressListener)
+                    }
                 }
             }
         }

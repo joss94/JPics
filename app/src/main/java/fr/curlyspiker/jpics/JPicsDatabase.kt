@@ -44,14 +44,17 @@ interface CategoryDao {
 @Dao
 interface PictureDao {
 
-    @Query("SELECT picId FROM picture")
+    @Query("SELECT picId FROM picture ORDER BY creationDate")
     fun getAllIds(): List<Int>
 
-    @Query("SELECT picId FROM picture WHERE isArchived=1")
+    @Query("SELECT picId FROM picture WHERE isArchived=1 ORDER BY creationDate")
     fun getArchivedIds(): List<Int>
 
     @Query("SELECT * FROM picture WHERE picId=:picId")
     fun loadOneById(picId: Int): Picture?
+
+    @Query("SELECT * FROM picture WHERE picId IN (:picIds)")
+    fun loadManyById(picIds: List<Int>): List<Picture?>
 
     @Insert
     fun insertAll(vararg picture: Picture)

@@ -153,6 +153,8 @@ class InstantUploadManager private constructor(val context: Context) {
                         val file = File(path)
                         val createdTime = file.lastModified()
 
+                        // TODO: Fix bug
+                        /*
                         PiwigoData.addImages(listOf(Uri.parse(path)), context.contentResolver, listOf(instantUploadCat), listener = object : PiwigoData.ProgressListener{
                             override fun onStarted() {}
 
@@ -167,6 +169,8 @@ class InstantUploadManager private constructor(val context: Context) {
                             override fun onProgress(progress: Float) {}
 
                         })
+
+                         */
                     } else {
                         uploadNext(index + 1)
                     }
