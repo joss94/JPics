@@ -2,6 +2,7 @@ package fr.curlyspiker.jpics
 
 import android.content.Context
 import androidx.room.*
+import kotlinx.coroutines.flow.Flow
 import java.util.*
 
 
@@ -15,6 +16,13 @@ interface CategoryDao {
 
     @Query("SELECT * FROM category WHERE catId=:catId")
     fun loadOneById(catId: Int): Category?
+
+    @Transaction
+    @Query("SELECT * FROM category WHERE catId=:catId")
+    fun loadOneByIdWithChildrenFlow(catId: Int): Flow<CategoryWithChildren>?
+
+    @Query("SELECT * FROM category WHERE catId=:catId")
+    fun loadOneByIdFlow(catId: Int): Flow<Category>?
 
     @Query("SELECT * FROM category WHERE name LIKE :name LIMIT 1")
     fun findByName(name: String): Category?
@@ -45,7 +53,10 @@ interface CategoryDao {
 interface PictureDao {
 
     @Query("SELECT picId FROM picture ORDER BY creationDate")
-    fun getAllIds(): List<Int>
+    fun getAllIds(): Flow<List<Int>>
+
+    @Query("SELECT * FROM picture ORDER BY creationDate")
+    fun getAllPictures(): Flow<List<Picture>>
 
     @Query("SELECT picId FROM picture WHERE isArchived=1 ORDER BY creationDate")
     fun getArchivedIds(): List<Int>
@@ -102,9 +113,13 @@ interface PictureCategoryDao {
     @Query("SELECT picId FROM picture_category_cross_ref WHERE catId=:catId")
     fun getPicturesIdsWithArchived(catId: Int): List<Int>
 
+    @Query("SELECT * FROM picture INNER JOIN picture_category_cross_ref ON picture.picId=picture_category_cross_ref.picId " +
+            "INNER JOIN category ON category.catId=picture_category_cross_ref.catId WHERE picture_category_cross_ref.catId IN (:catIds) AND picture.isArchived=0")
+    fun getPictures(catIds: List<Int>): Flow<List<Picture>>
+
     @Query("SELECT picture.picId FROM picture INNER JOIN picture_category_cross_ref ON picture.picId=picture_category_cross_ref.picId " +
-            "INNER JOIN category ON category.catId=picture_category_cross_ref.catId WHERE picture_category_cross_ref.catId=:catId AND picture.isArchived=0")
-    fun getPicturesIds(catId: Int): List<Int>
+            "INNER JOIN category ON category.catId=picture_category_cross_ref.catId WHERE picture_category_cross_ref.catId IN (:catIds) AND picture.isArchived=0")
+    fun getPicturesIds(catIds: List<Int>): Flow<List<Int>>
 }
 
 @Dao

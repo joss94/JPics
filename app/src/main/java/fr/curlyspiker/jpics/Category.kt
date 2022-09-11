@@ -1,8 +1,7 @@
 package fr.curlyspiker.jpics
 
-import androidx.room.ColumnInfo
-import androidx.room.Entity
-import androidx.room.PrimaryKey
+import androidx.room.*
+import kotlinx.coroutines.flow.Flow
 import org.json.JSONObject
 
 @Entity
@@ -42,15 +41,21 @@ data class Category (
         return DatabaseProvider.db.CategoryDao().findCategoryChildren(catId)
     }
 
-    fun getPictures(recursive: Boolean = false) : List<Int>  {
+    fun getPicturesIds(recursive: Boolean = false) : Flow<List<Int>>  {
 
-        val out = mutableListOf<Int>()
-        out.addAll(DatabaseProvider.db.PictureCategoryDao().getPicturesIds(catId))
-
+        val cats = mutableListOf(catId)
         if(recursive) {
-            getChildren().forEach { out.addAll(PiwigoData.getCategoryFromId(it)?.getPictures(recursive) ?: listOf()) }
+            cats.addAll(getChildren())
         }
-        return out
+        return DatabaseProvider.db.PictureCategoryDao().getPicturesIds(cats)
+    }
+
+    fun getPictures(recursive: Boolean = false) : Flow<List<Picture>> {
+        val cats = mutableListOf(catId)
+        if(recursive) {
+            cats.addAll(getChildren())
+        }
+        return DatabaseProvider.db.PictureCategoryDao().getPictures(cats)
     }
 
     fun getHierarchy() : List<Int> {
@@ -66,3 +71,16 @@ data class Category (
         return parents
     }
 }
+
+@Entity
+data class CategoryWithChildren (
+    @Embedded val category: Category,
+    @Relation(
+        parentColumn = "catId",
+        entityColumn = "parent_id"
+    ) val children: List<Category>,
+    @Relation(
+        parentColumn = "parent_id",
+        entityColumn = "catId"
+    ) val parent: Category?
+    )

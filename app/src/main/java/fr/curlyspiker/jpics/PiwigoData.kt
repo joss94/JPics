@@ -44,7 +44,7 @@ object PiwigoData {
         refreshUsers ()
     }
 
-    suspend fun refreshPictures(cats: List<Int>?): List<Picture> {
+    suspend fun refreshPictures(cats: List<Int>?, cb: () -> Unit = {}): List<Picture> {
         val pictures = Collections.synchronizedList(mutableListOf<Picture>())
         suspend fun getPicturesNextPage(page: Int = 0) {
             val pics = PiwigoAPI.pwgCategoriesGetImages(cats, page = page, perPage = 500, order = "date_creation")
@@ -81,10 +81,12 @@ object PiwigoData {
         } else {
             listeners.forEach { it?.onImagesReady(null) }
         }
+
+        cb()
         return pictures
     }
 
-    suspend fun refreshCategories() {
+    suspend fun refreshCategories(cb: () -> Unit = {}) {
         val categories = PiwigoAPI.pwgCategoriesGetList(recursive = true)
 
         // Delete cats that are not in list anymore (this includes the Home...)
@@ -105,7 +107,10 @@ object PiwigoData {
                 refreshCategories()
             }
 
-            else -> listeners.forEach { it?.onCategoriesReady() }
+            else -> {
+                listeners.forEach { it?.onCategoriesReady() }
+                cb()
+            }
         }
     }
 
@@ -174,6 +179,10 @@ object PiwigoData {
 
     fun getPictureFromId(id: Int): Picture? {
         return DatabaseProvider.db.PictureDao().loadOneById(id)
+    }
+
+    fun getArchivedIds(): List<Int> {
+        return DatabaseProvider.db.PictureDao().getArchivedIds()
     }
 
     fun getTagFromId(id: Int): PicTag? {
@@ -402,18 +411,20 @@ object PiwigoData {
 
     suspend fun refreshCategoryRepresentative(cat: Int) {
         DatabaseProvider.db.CategoryDao().loadOneById(cat)?.let { category ->
-            val validPic = category.getPictures(true).firstOrNull { id -> DatabaseProvider.db.PictureDao().loadOneById(id)?.thumbnailUrl?.isNotEmpty() == true }
-            if(validPic != null) {
-                Log.d("TAG", "Setting representative for cat $cat: $validPic")
-                category.thumbnailUrl = DatabaseProvider.db.PictureDao().loadOneById(validPic)!!.thumbnailUrl
-                PiwigoAPI.pwgCategoriesSetRepresentative(cat, validPic)
-                listeners.forEach { it?.onCategoriesReady() }
-            } else {
-                PiwigoAPI.pwgCategoriesDeleteRepresentative(cat)
-                category.thumbnailUrl = ""
-                listeners.forEach { it?.onCategoriesReady() }
+            category.getPicturesIds(true).collect {
+                val validPic = it.firstOrNull { id -> DatabaseProvider.db.PictureDao().loadOneById(id)?.thumbnailUrl?.isNotEmpty() == true }
+                if(validPic != null) {
+                    Log.d("TAG", "Setting representative for cat $cat: $validPic")
+                    category.thumbnailUrl = DatabaseProvider.db.PictureDao().loadOneById(validPic)!!.thumbnailUrl
+                    PiwigoAPI.pwgCategoriesSetRepresentative(cat, validPic)
+                    listeners.forEach { it?.onCategoriesReady() }
+                } else {
+                    PiwigoAPI.pwgCategoriesDeleteRepresentative(cat)
+                    category.thumbnailUrl = ""
+                    listeners.forEach { it?.onCategoriesReady() }
+                }
+                DatabaseProvider.db.CategoryDao().update(category)
             }
-            DatabaseProvider.db.CategoryDao().update(category)
         }
     }
 
