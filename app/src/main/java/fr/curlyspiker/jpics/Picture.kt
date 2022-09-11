@@ -87,25 +87,6 @@ data class Picture (
         return DatabaseProvider.db.PictureTagDao().getTagsFromPicture(picId)
     }
 
-    fun getCategories(recursive: Boolean = false) : List<Int> {
-
-        val out = mutableListOf<Int>()
-        val directParents = DatabaseProvider.db.PictureCategoryDao().getParentsIds(picId)
-        for (cat in directParents) {
-            out.add(cat)
-
-            if(recursive) {
-                val parents = PiwigoData.getCategoryFromId(cat)?.getHierarchy()
-                parents?.forEach { parent ->
-                    if (!out.contains(parent)) {
-                        out.add(parent)
-                    }
-                }
-            }
-        }
-        return out
-    }
-
     fun getCategoriesFromInfoJson() : List<Int> {
         val out = mutableListOf<Int>()
         val catsArray = mInfo?.optJSONArray("categories") ?: JSONArray()
@@ -129,18 +110,6 @@ data class Picture (
              */
         }
         else cb(mInfo ?: JSONObject())
-    }
-
-    fun getRepresentedBy() : List<Int> {
-        val out = mutableListOf<Int>()
-        Log.d("TAG", "Pic thumbnail url: $thumbnailUrl")
-        PiwigoData.getAllCategories().forEach{
-            if(it.thumbnailUrl == thumbnailUrl) {
-                out.add(it.catId)
-                Log.d("TAG", "This pic was thumbnail to ${it.catId}")
-            }
-        }
-        return out
     }
 
     companion object {

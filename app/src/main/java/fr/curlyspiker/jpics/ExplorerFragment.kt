@@ -180,8 +180,6 @@ class ExplorerFragment (startCat: Int? = null) :
         transaction.commitAllowingStateLoss()
 
         swipeContainer.setOnRefreshListener {
-            swipeContainer.isRefreshing = true
-            swipeContainer.visibility = View.VISIBLE
             explorerVM.refreshCategories()
         }
 
@@ -226,9 +224,11 @@ class ExplorerFragment (startCat: Int? = null) :
         }
 
         explorerVM.getCategory().observe(viewLifecycleOwner, Observer { cat ->
-            categoriesAdapter?.refresh(cat.children)
-            updateViews(cat)
-            swipeContainer.visibility = if(swipeContainer.isRefreshing || cat?.children?.isNotEmpty() == true) View.VISIBLE else View.GONE
+            cat?.let {
+                categoriesAdapter?.refresh(cat.children)
+                updateViews(cat)
+                swipeContainer.visibility = if(swipeContainer.isRefreshing || cat.children.isNotEmpty()) View.VISIBLE else View.GONE
+            }
         })
         explorerVM.isRefreshing().observe(viewLifecycleOwner, Observer {
             activity?.runOnUiThread {
@@ -259,7 +259,7 @@ class ExplorerFragment (startCat: Int? = null) :
         albumTitleEdit.setText(cat.category.name)
 
         albumPathLayout.removeAllViews()
-        val parents = cat.category.getHierarchy().reversed()
+        val parents = PiwigoData.getCategoryParentsTree(cat.category.catId).reversed()
         for(i in parents.indices) {
             val p = parents[i]
             val isLast = i == parents.size - 1

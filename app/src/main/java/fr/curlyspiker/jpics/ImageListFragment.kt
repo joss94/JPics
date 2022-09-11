@@ -42,6 +42,8 @@ import java.util.*
 class ILFViewModel(private var catId: Int?) : ViewModel() {
 
     private var isArchive: Boolean = false
+
+    private var fullList = listOf<Picture>()
     private val imageList = MutableLiveData<List<Picture>>()
     private val inProgress = MutableLiveData<Boolean>()
 
@@ -75,44 +77,53 @@ class ILFViewModel(private var catId: Int?) : ViewModel() {
     }
 
     private fun loadPictures() {
+        Log.d("ILF", "Loading pictures")
         flowJob?.cancel()
-        flowJob = viewModelScope.launch {
+        flowJob = viewModelScope.launch(Dispatchers.IO) {
             val category = PiwigoData.getCategoryFromId(catId ?: -1)
             if (category != null) {
                 category.getPictures().collect { pics ->
-                    val sortedPics = pics.sortedWith(compareByDescending<Picture>{ it.creationDate }.thenBy{ it.name })
-                    filterImages(sortedPics)
+                    fullList = pics.sortedWith(compareByDescending<Picture>{ it.creationDate }.thenBy{ it.name })
+
+                    Log.d("ILF", "Loading pictures")
+                    filterImages()
                 }
             } else {
                 DatabaseProvider.db.PictureDao().getAllPictures().collect { pics ->
-                    val sortedPics = pics.sortedWith(compareByDescending<Picture>{ it.creationDate }.thenBy{ it.name })
-                    filterImages(sortedPics)
+                    fullList = pics.sortedWith(compareByDescending<Picture>{ it.creationDate }.thenBy{ it.name })
+
+                    filterImages()
                 }
             }
 
         }
     }
 
-    private fun filterImages(images: List<Picture>) {
-        val filteredPictures = if(query.isNotEmpty()) {
-            val filteredTags = PiwigoData.getAllTags().filter { it.name.lowercase().contains(query) }.map { it.tagId }
-            val filteredCats = PiwigoData.getAllCategories().filter { it.name.lowercase().contains(query) }.map { it.catId }
+    private fun filterImages() {
 
-            images.filter { pic ->
-                pic.name.lowercase().contains(query) ||
-                filteredTags.intersect(pic.getTags().toSet()).isNotEmpty() ||
-                pic.getCategories(recursive = true).intersect(filteredCats.toSet()).isNotEmpty()
-            }
-        } else { images }
+        viewModelScope.launch(Dispatchers.IO) {
+            val filteredPictures = if(query.isNotEmpty()) {
+                val filteredTags = PiwigoData.getAllTags().filter { it.name.lowercase().contains(query) }.map { it.tagId }
+                val filteredCats = PiwigoData.getAllCategories().filter {
+                    PiwigoData.getCategoriesFromIds(PiwigoData.getCategoryParentsTree(it.catId)).any {
+                            parent -> parent.name.lowercase().contains(query)
+                    }
+                }.map { it.catId }
 
-        imageList.postValue(filteredPictures)
+                fullList.filter { pic ->
+                    pic.name.lowercase().contains(query) ||
+                            filteredTags.intersect(pic.getTags().toSet()).isNotEmpty() ||
+                            PiwigoData.getPictureCategories(pic.picId).intersect(filteredCats.toSet()).isNotEmpty()
+                }
+            } else { fullList }
+
+            imageList.postValue(filteredPictures)
+        }
     }
 
     fun setFilter(query: String) {
         this.query = query.lowercase()
-        imageList.value?.let {
-            filterImages(it)
-        }
+        filterImages()
     }
 
     fun refreshPictures(ctx: Context) {
@@ -122,6 +133,12 @@ class ILFViewModel(private var catId: Int?) : ViewModel() {
             PiwigoData.refreshPictures(catId?.let { listOf(it) }) {
                 inProgress.postValue(false)
             }
+        }
+    }
+
+    fun addPictures(uris: List<Uri>, ctx: Context, cats: List<Int>, listener: PiwigoData.ProgressListener) {
+        viewModelScope.launch(Dispatchers.IO) {
+            PiwigoData.addImages(uris, ctx.contentResolver, cats, listener = listener)
         }
     }
 
@@ -359,10 +376,7 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
                 progressTitle.text = getString(R.string.read_from_disk)
             }
 
-            val progressListener = this
-            lifecycleScope.launch {
-                PiwigoData.addImages(uris, requireContext().contentResolver, listOf(c), listener = progressListener)
-            }
+            imageListVM.addPictures(uris, requireContext(), listOf(c), this)
         }
     }
 

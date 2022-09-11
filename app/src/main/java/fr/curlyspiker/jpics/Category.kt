@@ -12,7 +12,7 @@ data class Category (
 ) {
 
     var thumbnailId: Int = -1
-    var thumbnailUrl: String = ""
+    @ColumnInfo(name="cat_thumbnail_url") var thumbnailUrl: String = ""
 
     companion object {
         fun fromJson(json: JSONObject) : Category {
@@ -56,19 +56,6 @@ data class Category (
             cats.addAll(getChildren())
         }
         return DatabaseProvider.db.PictureCategoryDao().getPictures(cats)
-    }
-
-    fun getHierarchy() : List<Int> {
-        val parents: MutableList<Int> = mutableListOf()
-
-        parents.add(catId)
-        PiwigoData.getCategoryFromId(parentId)?.getHierarchy()?.forEach { p ->
-            if(p !in parents) {
-                parents.add(p)
-            }
-        }
-
-        return parents
     }
 }
 

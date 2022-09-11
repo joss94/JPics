@@ -17,6 +17,9 @@ interface CategoryDao {
     @Query("SELECT * FROM category WHERE catId=:catId")
     fun loadOneById(catId: Int): Category?
 
+    @Query("SELECT * FROM category WHERE catId IN (:catIds)")
+    fun loadManyById(catIds: List<Int>): List<Category>
+
     @Transaction
     @Query("SELECT * FROM category WHERE catId=:catId")
     fun loadOneByIdWithChildrenFlow(catId: Int): Flow<CategoryWithChildren>?
@@ -120,6 +123,10 @@ interface PictureCategoryDao {
     @Query("SELECT picture.picId FROM picture INNER JOIN picture_category_cross_ref ON picture.picId=picture_category_cross_ref.picId " +
             "INNER JOIN category ON category.catId=picture_category_cross_ref.catId WHERE picture_category_cross_ref.catId IN (:catIds) AND picture.isArchived=0")
     fun getPicturesIds(catIds: List<Int>): Flow<List<Int>>
+
+    @Query("SELECT category.catId FROM category INNER JOIN picture_category_cross_ref ON category.catId=picture_category_cross_ref.catId " +
+            "INNER JOIN picture ON picture.picId=picture_category_cross_ref.picId WHERE picture_category_cross_ref.picId=:picId AND picture.thumbnail_url=category.cat_thumbnail_url")
+    fun getCategoriesRepresentedByPic(picId: Int): List<Int>
 }
 
 @Dao
@@ -213,7 +220,7 @@ interface UserDao {
     fun deleteIdsNotInList(userIds: List<Int>)
 }
 
-@Database(entities = [Category::class, Picture::class, PictureCategoryCrossRef::class, PicTag::class, PictureTagCrossRef::class, User::class], version = 5)
+@Database(entities = [Category::class, Picture::class, PictureCategoryCrossRef::class, PicTag::class, PictureTagCrossRef::class, User::class], version = 7)
 @TypeConverters(Converters::class)
 abstract class JPicsDatabase : RoomDatabase() {
     abstract fun CategoryDao(): CategoryDao

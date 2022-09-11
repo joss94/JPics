@@ -185,7 +185,7 @@ class ImageViewerActivity : AppCompatActivity() {
 
 
                 var albumsTxt = ""
-                currentPic().getCategories().forEach { id -> albumsTxt += "${PiwigoData.getCategoryFromId(id)?.name} - " }
+                PiwigoData.getPictureCategories(currentPicId).forEach { id -> albumsTxt += "${PiwigoData.getCategoryFromId(id)?.name} - " }
                 infoAlbums.text = if(albumsTxt.isEmpty()) "None" else albumsTxt.subSequence(0, albumsTxt.length - 3)
 
                 infoSize.text = getString(R.string.size_info).format(info.optString("width", "0").toInt(), info.optString("height", "0").toInt())
