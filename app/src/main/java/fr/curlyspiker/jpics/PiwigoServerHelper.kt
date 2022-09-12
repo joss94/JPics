@@ -59,9 +59,8 @@ object PiwigoServerHelper {
                     }
                 },
                 { error ->
-                    Log.d("PSH", "Error in POST request (req: ${String(error.networkResponse.data, Charsets.UTF_8)})")
                     error.printStackTrace()
-                    it.resumeWithException(PiwigoException("Error in POST request (req: ${String(error.networkResponse.data, Charsets.UTF_8)})"))
+                    it.resumeWithException(PiwigoException("Error in POST request"))
                 }
             ) {
                 override fun getBody(): ByteArray {
@@ -83,6 +82,7 @@ object PiwigoServerHelper {
             }
             requestQueue.add(req)
         } catch(e: Exception){
+            Log.d("PSH", "CAUGHT BAD EXCEPTION")
             it.resumeWithException(PiwigoException(e.toString()))
         }
     }

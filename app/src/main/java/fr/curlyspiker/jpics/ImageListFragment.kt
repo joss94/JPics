@@ -122,7 +122,7 @@ class ILFViewModel(private var catId: Int?) : ViewModel() {
     }
 
     fun setFilter(query: String) {
-        this.query = query.lowercase()
+        this.query = query.lowercase().trim()
         filterImages()
     }
 

@@ -114,6 +114,7 @@ class InstantUploadManager private constructor(val context: Context) {
     }
 
     fun checkForNewImages() {
+        Log.d("IU", "Checking for new images")
         GlobalScope.launch(Dispatchers.IO) {
             val imageList = findImages()
             imageFolders.clear()

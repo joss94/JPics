@@ -6,10 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.util.Log
 import android.widget.Toast
-import androidx.room.ColumnInfo
-import androidx.room.Entity
-import androidx.room.Ignore
-import androidx.room.PrimaryKey
+import androidx.room.*
 import com.squareup.picasso.Picasso
 import org.json.JSONArray
 import org.json.JSONObject
@@ -140,7 +137,24 @@ data class Picture (
     }
 }
 
-@Entity(primaryKeys = ["picId", "catId"], tableName = "picture_category_cross_ref")
+@Entity(
+    primaryKeys = ["picId", "catId"],
+    tableName = "picture_category_cross_ref" ,
+    foreignKeys = [
+        ForeignKey(
+            entity = Picture::class,
+            parentColumns = ["picId"],
+            childColumns = ["picId"],
+            onDelete = ForeignKey.CASCADE,
+            onUpdate = ForeignKey.CASCADE),
+        ForeignKey(
+            entity = Category::class,
+            parentColumns = ["catId"],
+            childColumns = ["catId"],
+            onDelete = ForeignKey.CASCADE,
+            onUpdate = ForeignKey.CASCADE)
+    ]
+)
 data class PictureCategoryCrossRef (val picId: Int,
                                     val catId: Int)
 

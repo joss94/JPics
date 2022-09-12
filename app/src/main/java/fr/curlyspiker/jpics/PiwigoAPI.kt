@@ -79,8 +79,15 @@ object PiwigoAPI {
         req.put("visible", visible)
         req.put("status", if (isPublic) "public" else "private")
 
-        val rsp = PiwigoServerHelper.volleyPost(req)
-        return rsp.optInt("id", 0)
+        var out = 0
+        try {
+            val rsp = PiwigoServerHelper.volleyPost(req)
+            out = rsp.optInt("id", 0)
+        } catch (e: Exception) {
+            Log.d("API", "An error occurred: $e")
+        }
+
+        return out
     }
 
     suspend fun pwgCategoriesDelete(categoryId: Int, pwgToken: String) {
@@ -90,7 +97,11 @@ object PiwigoAPI {
         req.put("category_id", categoryId)
         req.put("pwg_token", pwgToken)
 
-        PiwigoServerHelper.volleyPost(req)
+        try {
+            PiwigoServerHelper.volleyPost(req)
+        } catch (e: Exception) {
+            Log.d("API", "An error occurred: $e")
+        }
     }
 
     suspend fun pwgCategoriesDeleteRepresentative(categoryId: Int) {
@@ -99,7 +110,11 @@ object PiwigoAPI {
         req.put("method", "pwg.categories.deleteRepresentative")
         req.put("category_id", categoryId)
 
-        PiwigoServerHelper.volleyPost(req)
+        try {
+            PiwigoServerHelper.volleyPost(req)
+        } catch (e: Exception) {
+            Log.d("API", "An error occurred: $e")
+        }
     }
 
     suspend fun pwgCategoriesMove(catId: Int, pwgToken: String, parent: Int) {
@@ -110,7 +125,11 @@ object PiwigoAPI {
         req.put("parent", parent)
         req.put("pwg_token", pwgToken)
 
-        PiwigoServerHelper.volleyPost(req)
+        try {
+            PiwigoServerHelper.volleyPost(req)
+        } catch (e: Exception) {
+            Log.d("API", "An error occurred: $e")
+        }
     }
 
     suspend fun pwgCategoriesSetInfo(catId: Int, name: String) {
@@ -120,7 +139,11 @@ object PiwigoAPI {
         req.put("category_id", catId)
         req.put("name", name)
 
-        PiwigoServerHelper.volleyPost(req)
+        try {
+            PiwigoServerHelper.volleyPost(req)
+        } catch (e: Exception) {
+            Log.d("API", "An error occurred: $e")
+        }
     }
 
     suspend fun pwgCategoriesSetRepresentative(categoryId: Int, imageId: Int) {
@@ -130,7 +153,11 @@ object PiwigoAPI {
         req.put("category_id", categoryId)
         req.put("image_id", imageId)
 
-        PiwigoServerHelper.volleyPost(req)
+        try {
+            PiwigoServerHelper.volleyPost(req)
+        } catch (e: Exception) {
+            Log.d("API", "An error occurred: $e")
+        }
     }
 
     suspend fun pwgImagesAddChunk(data: String, originalSum: String, position: String) {
@@ -141,7 +168,11 @@ object PiwigoAPI {
         req.put("original_sum", originalSum)
         req.put("position", position)
 
-        PiwigoServerHelper.volleyPost(req)
+        try {
+            PiwigoServerHelper.volleyPost(req)
+        } catch (e: Exception) {
+            Log.d("API", "An error occurred: $e")
+        }
     }
 
     suspend fun pwgImagesCheckUpload(): Boolean {
@@ -149,8 +180,14 @@ object PiwigoAPI {
 
         req.put("method", "pwg.images.checkUpload")
 
-        val rsp = PiwigoServerHelper.volleyPost(req)
-        return rsp.optBoolean("ready_for_upload", false)
+        var out = false
+        try {
+            val rsp = PiwigoServerHelper.volleyPost(req)
+            out = rsp.optBoolean("ready_for_upload", false)
+        } catch (e: Exception) {
+            Log.d("API", "An error occurred: $e")
+        }
+        return out
     }
 
     suspend fun pwgImagesExist(bytes: List<ByteArray>): List<Int?> {
@@ -168,12 +205,18 @@ object PiwigoAPI {
         }
         req.put("md5sum_list", md5sumListReq)
 
-        val rsp = PiwigoServerHelper.volleyPost(req)
         val ids = mutableListOf<Int?>()
-        for (md5 in md5sumList) {
-            val id = rsp.optInt(md5)
-            ids.add(if (id > 0) id else null)
+
+        try {
+            val rsp = PiwigoServerHelper.volleyPost(req)
+            for (md5 in md5sumList) {
+                val id = rsp.optInt(md5)
+                ids.add(if (id > 0) id else null)
+            }
+        } catch (e: Exception) {
+            Log.d("API", "An error occurred: $e")
         }
+
         return ids
     }
 
@@ -203,8 +246,16 @@ object PiwigoAPI {
         }
         req.put("tag_ids", tagsList)
 
-        val rsp = PiwigoServerHelper.volleyPost(req)
-        return rsp.optInt("image_id", 0)
+        var out = 0
+
+        try {
+            val rsp = PiwigoServerHelper.volleyPost(req)
+            out = rsp.optInt("image_id", 0)
+        } catch (e: Exception) {
+            Log.d("API", "An error occurred: $e")
+        }
+
+        return out
     }
 
     suspend fun pwgImagesDelete(ids: List<Int>, pwgToken: String) {
@@ -237,7 +288,11 @@ object PiwigoAPI {
         req.put("single_value_mode", singleValueMode)
         req.put("multiple_value_mode", multipleValueMode)
 
-        PiwigoServerHelper.volleyPost(req)
+        try {
+            PiwigoServerHelper.volleyPost(req)
+        } catch (e: Exception) {
+            Log.d("API", "An error occurred: $e")
+        }
     }
 
     suspend fun pwgJpicsImagesArchive(imageIds: List<Int>, archive: Boolean) {
@@ -247,7 +302,11 @@ object PiwigoAPI {
         req.put("image_id", JSONArray(imageIds))
         req.put("archive", archive)
 
-        PiwigoServerHelper.volleyPost(req)
+        try {
+            PiwigoServerHelper.volleyPost(req)
+        } catch (e: Exception) {
+            Log.d("API", "An error occurred: $e")
+        }
     }
 
     suspend fun pwgJpicsImagesMoveToCategory(imageIds: List<Int>, categoryId: Int) {
@@ -257,7 +316,11 @@ object PiwigoAPI {
         req.put("image_id", JSONArray(imageIds))
         req.put("cat_id", categoryId)
 
-        PiwigoServerHelper.volleyPost(req)
+        try {
+            PiwigoServerHelper.volleyPost(req)
+        } catch (e: Exception) {
+            Log.d("API", "An error occurred: $e")
+        }
     }
 
     suspend fun pwgSessionGetStatus(): JSONObject {
@@ -293,12 +356,18 @@ object PiwigoAPI {
         req.put("username", username)
         req.put("password", password)
 
-        val rsp = PiwigoServerHelper.volleyPost(req)
-        val success = rsp.optString("stat", "error") == "ok"
         var logged = false
-        if (success) {
-            logged = rsp.optBoolean("result")
+        try {
+            val rsp = PiwigoServerHelper.volleyPost(req)
+            val success = rsp.optString("stat", "error") == "ok"
+
+            if (success) {
+                logged = rsp.optBoolean("result")
+            }
+        } catch (e: Exception) {
+            Log.d("API", "An error occurred: $e")
         }
+
         return logged
     }
 
@@ -307,7 +376,11 @@ object PiwigoAPI {
 
         req.put("method", "pwg.session.logout")
 
-        PiwigoServerHelper.volleyPost(req)
+        try {
+            PiwigoServerHelper.volleyPost(req)
+        } catch (e: Exception) {
+            Log.d("API", "An error occurred: $e")
+        }
     }
 
     suspend fun pwgTagsAdd(tag: PicTag): Int {
@@ -316,8 +389,15 @@ object PiwigoAPI {
         req.put("method", "pwg.tags.add")
         req.put("name", tag.name)
 
-        val rsp = PiwigoServerHelper.volleyPost(req)
-        return rsp.optInt("id")
+        var out = -1
+        try {
+            val rsp = PiwigoServerHelper.volleyPost(req)
+            out = rsp.optInt("id")
+        } catch (e: Exception) {
+            Log.d("API", "An error occurred: $e")
+        }
+
+        return out
     }
 
     suspend fun pwgTagsGetAdminList(): List<PicTag> {
@@ -325,16 +405,21 @@ object PiwigoAPI {
 
         req.put("method", "pwg.tags.getAdminList")
 
-        val rsp = PiwigoServerHelper.volleyPost(req)
-        val tagJson = rsp.optJSONArray("tags")
         val tags = mutableListOf<PicTag>()
+        try {
+            val rsp = PiwigoServerHelper.volleyPost(req)
+            val tagJson = rsp.optJSONArray("tags")
 
-        if (tagJson != null) {
-            for (i in 0 until tagJson.length()) {
-                val tag = tagJson.getJSONObject(i)
-                tags.add(PicTag(tag.getString("id").toInt(), tag.getString("name")))
+            if (tagJson != null) {
+                for (i in 0 until tagJson.length()) {
+                    val tag = tagJson.getJSONObject(i)
+                    tags.add(PicTag(tag.getString("id").toInt(), tag.getString("name")))
+                }
             }
+        } catch (e: Exception) {
+            Log.d("API", "An error occurred: $e")
         }
+
         return tags
     }
 
@@ -343,15 +428,22 @@ object PiwigoAPI {
 
         req.put("method", "pwg.users.getList")
 
-        val rsp = PiwigoServerHelper.volleyPost(req)
-        val usersJson = rsp.optJSONArray("users")
+
         val users = mutableListOf<User>()
-        if (usersJson != null) {
-            for (i in 0 until usersJson.length()) {
-                val user = usersJson.getJSONObject(i)
-                users.add(User(user.getInt("id"), user.getString("username")))
+        try {
+            val rsp = PiwigoServerHelper.volleyPost(req)
+            val usersJson = rsp.optJSONArray("users")
+
+            if (usersJson != null) {
+                for (i in 0 until usersJson.length()) {
+                    val user = usersJson.getJSONObject(i)
+                    users.add(User(user.getInt("id"), user.getString("username")))
+                }
             }
+        } catch (e: Exception) {
+            Log.d("API", "An error occurred: $e")
         }
+
         return users
     }
 

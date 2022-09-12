@@ -1,6 +1,7 @@
 package fr.curlyspiker.jpics
 
 import android.content.Context
+import android.provider.SyncStateContract.Helpers.insert
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 import java.util.*
@@ -36,8 +37,23 @@ interface CategoryDao {
     @Insert
     fun insertAll(vararg category: Category)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun insertOrReplace(vararg category: Category)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    fun insert(category: Category): Long
+
+    @Transaction
+    fun insertOrReplace(category: Category) {
+        val id: Long = insert(category)
+        if (id == -1L) {
+            update(category)
+        }
+    }
+
+    @Transaction
+    fun insertOrReplace(cats: List<Category>) {
+        for (cat in cats) {
+            insertOrReplace(cat)
+        }
+    }
 
     @Update
     fun update(cat: Category?)
@@ -73,8 +89,23 @@ interface PictureDao {
     @Insert
     fun insertAll(vararg picture: Picture)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun insertOrReplace(vararg picture: Picture)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    fun insert(picture: Picture): Long
+
+    @Transaction
+    fun insertOrReplace(picture: Picture) {
+        val id: Long = insert(picture)
+        if (id == -1L) {
+            update(picture)
+        }
+    }
+
+    @Transaction
+    fun insertOrReplace(pictures: List<Picture>) {
+        for (picture in pictures) {
+            insertOrReplace(picture)
+        }
+    }
 
     @Update
     fun update(picture: Picture?)
@@ -89,8 +120,26 @@ interface PictureDao {
 @Dao
 interface PictureCategoryDao {
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun insertOrReplace(vararg picCat: PictureCategoryCrossRef)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    fun insert(picCat: PictureCategoryCrossRef): Long
+
+    @Update
+    fun update(picCat: PictureCategoryCrossRef?)
+
+    @Transaction
+    fun insertOrReplace(picCat: PictureCategoryCrossRef) {
+        val id: Long = insert(picCat)
+        if (id == -1L) {
+            update(picCat)
+        }
+    }
+
+    @Transaction
+    fun insertOrReplace(picCats: List<PictureCategoryCrossRef>) {
+        for (picCat in picCats) {
+            insertOrReplace(picCat)
+        }
+    }
 
     @Query("DELETE FROM picture_category_cross_ref WHERE picId NOT IN (:picIds) AND catId IN (:catIds)")
     fun deletePicsNotInListFromCats(picIds: IntArray, catIds: IntArray)
@@ -220,7 +269,7 @@ interface UserDao {
     fun deleteIdsNotInList(userIds: List<Int>)
 }
 
-@Database(entities = [Category::class, Picture::class, PictureCategoryCrossRef::class, PicTag::class, PictureTagCrossRef::class, User::class], version = 7)
+@Database(entities = [Category::class, Picture::class, PictureCategoryCrossRef::class, PicTag::class, PictureTagCrossRef::class, User::class], version = 8)
 @TypeConverters(Converters::class)
 abstract class JPicsDatabase : RoomDatabase() {
     abstract fun CategoryDao(): CategoryDao

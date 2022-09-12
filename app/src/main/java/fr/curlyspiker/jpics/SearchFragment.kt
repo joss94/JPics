@@ -12,7 +12,7 @@ import androidx.core.widget.doOnTextChanged
 class SearchFragment : Fragment() {
 
     private lateinit var keywordsEdit: EditText
-    private lateinit var imagesListFragment: ImageListFragment
+    private var imagesListFragment = ImageListFragment(null)
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -26,7 +26,6 @@ class SearchFragment : Fragment() {
 
         keywordsEdit = view.findViewById(R.id.keywords_edit)
 
-        imagesListFragment = ImageListFragment(null)
         val fragmentManager = requireActivity().supportFragmentManager
         val transaction = fragmentManager.beginTransaction()
         transaction.replace(R.id.image_list_fragment, imagesListFragment)

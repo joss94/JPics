@@ -176,7 +176,7 @@ class MainActivity : BaseActivity() {
             .build()
 
         // Periodic time is limited by Android to 15 min, it will not repeat faster than this...
-        val instantUploadRequest = PeriodicWorkRequestBuilder<InstantUploaderWorker>(16, TimeUnit.MINUTES)
+        val instantUploadRequest = PeriodicWorkRequestBuilder<InstantUploaderWorker>(10, TimeUnit.SECONDS)
             .setConstraints(constraints)
             .setInitialDelay(2L, TimeUnit.SECONDS)
             .build()

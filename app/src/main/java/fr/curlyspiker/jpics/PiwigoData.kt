@@ -23,10 +23,10 @@ object PiwigoData {
     private var homeCat = Category(0, "Home")
 
     suspend fun refreshEverything() {
-        refreshPictures(null)
+        refreshUsers ()
         refreshCategories()
         refreshTags()
-        refreshUsers ()
+        refreshPictures(null)
     }
 
     suspend fun refreshPictures(cats: List<Int>?, cb: () -> Unit = {}): List<Picture> {
@@ -49,18 +49,16 @@ object PiwigoData {
             DatabaseProvider.db.PictureCategoryDao().deletePicsNotInList(picIds.toIntArray())
         }
 
+        val picCats = mutableListOf<PictureCategoryCrossRef>()
         pictures.forEach { p ->
-
-            // Insert or replace received picture
-            DatabaseProvider.db.PictureDao().insertOrReplace(p)
-
-            // Insert or replace its link to categories
             p.getCategoriesFromInfoJson().forEach { catId ->
-                DatabaseProvider.db.PictureCategoryDao().insertOrReplace(PictureCategoryCrossRef(p.picId, catId))
+                picCats.add(PictureCategoryCrossRef(p.picId, catId))
             }
-
-            // TODO: Insert or replace its links to tags?
         }
+
+        DatabaseProvider.db.PictureDao().insertOrReplace(pictures)
+        DatabaseProvider.db.PictureCategoryDao().insertOrReplace(picCats)
+        // TODO: Insert or replace links to tags?
 
         cb()
         return pictures
@@ -77,9 +75,7 @@ object PiwigoData {
         DatabaseProvider.db.CategoryDao().insertOrReplace(homeCat)
 
         // Add all new categories received from server
-        categories.forEach { c ->
-            DatabaseProvider.db.CategoryDao().insertOrReplace(c)
-        }
+        DatabaseProvider.db.CategoryDao().insertOrReplace(categories)
 
         when {
             getInstantUploadCat() == null -> {
