@@ -5,11 +5,14 @@
       <map>
         <entry key="../../../../../../layout/custom_preview.xml" value="0.41822916666666665" />
         <entry key="../../../../layout/custom_preview.xml" value="0.13758992805755396" />
+        <entry key="app/src/main/res/drawable/account.xml" value="0.1945" />
         <entry key="app/src/main/res/drawable/add_big.xml" value="0.215625" />
         <entry key="app/src/main/res/drawable/add_button.xml" value="0.215625" />
+        <entry key="app/src/main/res/drawable/button.xml" value="0.165" />
         <entry key="app/src/main/res/drawable/check_circle.xml" value="0.371875" />
         <entry key="app/src/main/res/drawable/cloud_off.xml" value="0.3260416666666667" />
         <entry key="app/src/main/res/drawable/cloud_on.xml" value="0.3260416666666667" />
+        <entry key="app/src/main/res/drawable/ic_baseline_refresh_24.xml" value="0.1945" />
         <entry key="app/src/main/res/drawable/line.xml" value="0.21614583333333334" />
         <entry key="app/src/main/res/drawable/refresh.xml" value="0.215625" />
         <entry key="app/src/main/res/drawable/refresh_big.xml" value="0.215625" />
@@ -31,8 +34,15 @@
         <entry key="app/src/main/res/layout/dialog_category_picker.xml" value="0.33" />
         <entry key="app/src/main/res/layout/dialog_image_info.xml" value="0.28894927536231885" />
         <entry key="app/src/main/res/layout/dialog_tag_picker.xml" value="0.2796875" />
+        <entry key="app/src/main/res/layout/fragment_account.xml" value="0.25833333333333336" />
+        <entry key="app/src/main/res/layout/fragment_archive.xml" value="0.2734375" />
         <entry key="app/src/main/res/layout/fragment_explorer.xml" value="0.2641843971631206" />
-        <entry key="app/src/main/res/layout/fragment_image_list.xml" value="0.28894927536231885" />
+        <entry key="app/src/main/res/layout/fragment_home.xml" value="0.3802083333333333" />
+        <entry key="app/src/main/res/layout/fragment_image_list.xml" value="0.25" />
+        <entry key="app/src/main/res/layout/fragment_image_viewer.xml" value="0.3104166666666667" />
+        <entry key="app/src/main/res/layout/fragment_login.xml" value="0.2734375" />
+        <entry key="app/src/main/res/layout/fragment_settings.xml" value="0.2536231884057971" />
+        <entry key="app/src/main/res/layout/fragment_sync.xml" value="0.26927083333333335" />
         <entry key="app/src/main/res/layout/image_tile.xml" value="0.2916666666666667" />
         <entry key="app/src/main/res/layout/image_viewer_page.xml" value="0.19429347826086957" />
         <entry key="app/src/main/res/layout/image_viewer_page_video.xml" value="0.2293859649122807" />
@@ -49,6 +59,7 @@
         <entry key="app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml" value="0.143" />
         <entry key="app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml" value="0.1965" />
         <entry key="app/src/main/res/xml/filepaths.xml" value="0.23333333333333334" />
+        <entry key="app/src/main/res/xml/jpics_prefs.xml" value="0.2536231884057971" />
       </map>
     </option>
   </component>

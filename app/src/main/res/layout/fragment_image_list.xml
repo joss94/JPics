@@ -12,6 +12,43 @@
         android:layout_height="match_parent"
         android:orientation="vertical">
 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/add_image_button"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintRight_toRightOf="parent"
+                android:elevation="10dp"
+                android:text="Add images"
+                android:background="@drawable/round_button"
+                android:contentDescription=""
+                android:layout_margin="8dp"
+                android:gravity="center"
+                android:drawableLeft="@drawable/image"/>
+
+            <Button
+                android:id="@+id/add_category_button"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintRight_toRightOf="parent"
+                android:elevation="10dp"
+                android:text="Add album"
+                android:background="@drawable/round_button"
+                android:contentDescription=""
+                android:layout_margin="8dp"
+                android:gravity="center"
+                android:drawableLeft="@drawable/folder"/>
+
+        </LinearLayout>
+
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent">
@@ -39,36 +76,6 @@
         </FrameLayout>
 
     </LinearLayout>
-
-
-    <ImageButton
-        android:id="@+id/add_image_button"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintRight_toRightOf="parent"
-        android:elevation="10dp"
-        android:background="@drawable/add_button"
-        android:contentDescription=""
-        android:layout_marginEnd="20dp"
-        android:layout_marginBottom="20dp"
-        android:scaleX="0.7"
-        android:scaleY="0.7"/>
-
-    <ImageButton
-        android:id="@+id/refresh_button"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        app:layout_constraintBottom_toTopOf="@id/add_image_button"
-        app:layout_constraintRight_toRightOf="parent"
-        android:elevation="10dp"
-        android:background="@drawable/refresh_button"
-        android:contentDescription=""
-        android:layout_marginEnd="20dp"
-        android:scaleX="0.7"
-        android:scaleY="0.7"/>
-
-
 
     <LinearLayout
         android:id="@+id/progress_layout"

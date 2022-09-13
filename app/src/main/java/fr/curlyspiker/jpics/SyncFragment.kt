@@ -3,33 +3,40 @@ package fr.curlyspiker.jpics
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
+import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import java.io.File
 
-class SyncActivity : AppCompatActivity() {
+class SyncFragment : Fragment() {
 
     private lateinit var syncedList : RecyclerView
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_sync)
+    override fun onCreateView(
+        inflater: LayoutInflater, container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        // Inflate the layout for this fragment
+        return inflater.inflate(R.layout.fragment_sync, container, false)
+    }
 
-        syncedList = findViewById(R.id.synced_folders_list_view)
-        val syncedFoldersAdapter = SyncedFolderAdapter(applicationContext)
-        syncedList.layoutManager = LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false)
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        syncedList = view.findViewById(R.id.synced_folders_list_view)
+        val syncedFoldersAdapter = SyncedFolderAdapter(requireContext())
+        syncedList.layoutManager = LinearLayoutManager(requireContext(), LinearLayoutManager.VERTICAL, false)
         syncedList.adapter  = syncedFoldersAdapter
 
         syncedFoldersAdapter.refresh()
-
     }
+
 
     class SyncedFolderAdapter(val context: Context) :
         RecyclerView.Adapter<SyncedFolderAdapter.ViewHolder>(){
@@ -76,3 +83,4 @@ class SyncActivity : AppCompatActivity() {
         }
     }
 }
+

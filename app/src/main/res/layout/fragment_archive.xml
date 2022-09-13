@@ -1,23 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".ArchiveActivity"
+    tools:context=".ArchiveFragment"
     android:orientation="vertical">
-
-    <androidx.appcompat.widget.Toolbar
-        android:id="@+id/my_toolbar"
-        android:layout_width="match_parent"
-        android:layout_height="90dp"
-        app:menu="@menu/explorer_menu_archive"
-        android:theme="@style/ToolbarTheme"
-        app:title=""
-        android:paddingEnd="20dp"
-        android:paddingTop="30dp">
-
-    </androidx.appcompat.widget.Toolbar>
 
     <TextView
         android:layout_width="match_parent"

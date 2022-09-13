@@ -4,7 +4,6 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.AlertDialog
-import android.app.Application
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -14,6 +13,7 @@ import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
+import android.text.InputType
 import android.util.Log
 import android.view.*
 import android.widget.*
@@ -22,6 +22,7 @@ import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.*
 import androidx.lifecycle.Observer
@@ -37,7 +38,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
-
+import androidx.navigation.fragment.findNavController
 
 class ILFViewModel(private var catId: Int?) : ViewModel() {
 
@@ -45,7 +46,6 @@ class ILFViewModel(private var catId: Int?) : ViewModel() {
 
     private var fullList = listOf<Picture>()
     private val imageList = MutableLiveData<List<Picture>>()
-    private val inProgress = MutableLiveData<Boolean>()
 
     private var query: String = ""
 
@@ -66,10 +66,6 @@ class ILFViewModel(private var catId: Int?) : ViewModel() {
 
     fun getPictures(): LiveData<List<Picture>> {
         return imageList
-    }
-
-    fun isInProgress(): LiveData<Boolean> {
-        return inProgress
     }
 
     fun getCatId(): Int? {
@@ -126,19 +122,15 @@ class ILFViewModel(private var catId: Int?) : ViewModel() {
         filterImages()
     }
 
-    fun refreshPictures(ctx: Context) {
-        inProgress.postValue(true)
-        InstantUploadManager.getInstance(ctx).checkForNewImages()
-        viewModelScope.launch(Dispatchers.IO) {
-            PiwigoData.refreshPictures(catId?.let { listOf(it) }) {
-                inProgress.postValue(false)
-            }
-        }
-    }
-
     fun addPictures(uris: List<Uri>, ctx: Context, cats: List<Int>, listener: PiwigoData.ProgressListener) {
         viewModelScope.launch(Dispatchers.IO) {
             PiwigoData.addImages(uris, ctx.contentResolver, cats, listener = listener)
+        }
+    }
+
+    fun addCategory(name: String) {
+        viewModelScope.launch {
+            PiwigoData.addCategory(name, catId)
         }
     }
 
@@ -200,11 +192,9 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
     Fragment(), PiwigoData.ProgressListener {
 
     private val imageListVM: ILFViewModel by viewModels { ILFViewModelFactory(startCat) }
+    private val mainActivityVM: MainActivityViewModel by activityViewModels()
 
     private var actionMode : ActionMode? = null
-
-    private lateinit var addButton: ImageButton
-    private lateinit var refreshButton: ImageButton
 
     private lateinit var progressLayout: LinearLayout
     private lateinit var progressBar: ProgressBar
@@ -238,8 +228,6 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
             }
         }
 
-        addButton = view.findViewById(R.id.add_image_button)
-
         progressLayout = view.findViewById(R.id.progress_layout)
         progressBar = view.findViewById(R.id.progress_bar)
         progressTitle = view.findViewById(R.id.progress_title)
@@ -267,9 +255,6 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
         }
         builder.build()
 
-        refreshButton = view.findViewById(R.id.refresh_button)
-        refreshButton.setOnClickListener { imageListVM.refreshPictures(requireContext()) }
-
         picturesAdapter?.selectionListener = object : PicturesListAdapter.SelectionListener() {
             override fun onSelectionEnabled() {
                 actionMode = activity?.startActionMode(object: ActionMode.Callback {
@@ -278,8 +263,6 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
                         val menuRes = if(isArchive) R.menu.explorer_menu_archive else R.menu.explorer_menu
                         menuInflater?.inflate(menuRes, menu)
                         picturesAdapter?.selecting = true
-                        addButton.visibility = View.INVISIBLE
-                        refreshButton.visibility = View.INVISIBLE
                         return true
                     }
 
@@ -307,8 +290,6 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
                     override fun onDestroyActionMode(p0: ActionMode?) {
                         picturesAdapter?.exitSelectionMode()
                         picturesView.invalidate()
-                        addButton.visibility = View.VISIBLE
-                        refreshButton.visibility = View.VISIBLE
                     }
 
                     override fun onPrepareActionMode(mode: ActionMode?, p1: Menu?): Boolean { return true }
@@ -316,7 +297,11 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
             }
         }
 
-        addButton.setOnClickListener { addImages() }
+        val addImagesButton = view.findViewById<Button>(R.id.add_image_button)
+        addImagesButton.setOnClickListener { addImages() }
+
+        val addCategoryButton = view.findViewById<Button>(R.id.add_category_button)
+        addCategoryButton.setOnClickListener { addCategory() }
 
         imageListVM.setArchive(isArchive)
         imageListVM.getPictures().observe(viewLifecycleOwner, Observer { pictures ->
@@ -324,14 +309,6 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
                 picturesAdapter?.replaceAll(pictures)
             }
         })
-
-        imageListVM.isInProgress().observe(viewLifecycleOwner, Observer { inProgress ->
-            activity?.runOnUiThread {
-                refreshButton.isEnabled = !inProgress
-            }
-        })
-
-        imageListVM.refreshPictures(requireContext())
     }
 
     fun onItemsChanged() {
@@ -353,6 +330,28 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
         intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
         intent.putExtra(Intent.EXTRA_TITLE, "Select images to add")
         imgReq.launch(intent)
+    }
+
+    fun addCategory() {
+        val builder: AlertDialog.Builder = AlertDialog.Builder(requireContext(), R.style.AlertStyle)
+        builder.setTitle("Create a new album")
+
+        val input = EditText(requireContext())
+        input.hint = "Name of new album"
+        input.inputType = InputType.TYPE_CLASS_TEXT
+        input.setTextColor(requireContext().getColor(R.color.white))
+        input.setHintTextColor(requireContext().getColor(R.color.light_gray))
+        builder.setView(input)
+
+        builder.setPositiveButton("OK") { dialog, _ ->
+            val name = input.text.toString()
+            imageListVM.addCategory(name)
+            dialog.dismiss()
+        }
+
+        builder.setNegativeButton("Cancel") { dialog, _ -> dialog.cancel() }
+
+        builder.show()
     }
 
     private fun onImagesPicked(data: Intent?) {
@@ -613,10 +612,10 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false)  :
 
         private fun showImageFullscreen(position: Int) {
             PiwigoData.currentlyDisplayedList = pictures.map { p -> p.picId }.toMutableList()
+            fragment.mainActivityVM.setCatId(fragment.imageListVM.getCatId())
+            fragment.mainActivityVM.setPicId(getItemId(position).toInt())
 
-            val intent = Intent(mContext,ImageViewerActivity::class.java)
-            intent.putExtra("img_id", items[position].id.toInt())
-            ContextCompat.startActivity(mContext, intent, null)
+            fragment.findNavController().navigate(R.id.action_showImageViewer)
         }
 
         fun getSelectedPictures() : List<Int> {

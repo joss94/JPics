@@ -2,77 +2,85 @@ package fr.curlyspiker.jpics
 
 import android.Manifest
 import android.app.AlertDialog
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.ImageDecoder
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.os.Parcelable
-import android.provider.MediaStore
-import android.provider.OpenableColumns
 import android.util.Log
+import android.view.View
+import android.view.ViewTreeObserver
 import android.widget.ImageButton
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.fragment.NavHostFragment
+import androidx.preference.PreferenceManager
 import androidx.work.*
-import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.android.volley.toolbox.Volley
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.util.*
 import java.util.concurrent.TimeUnit
 
-class MainActivity : BaseActivity() {
+class MainActivityViewModel : ViewModel() {
+    private var catId: Int? = null
+    private var picId: Int? = null
 
-    private lateinit var accountButton: ImageButton
-    private lateinit var bottomView: BottomNavigationView
+    fun getCatId(): Int? {
+        return catId
+    }
 
-    private lateinit var albumsFragment: ExplorerFragment
-    private lateinit var allImagesFragment: AllImagesFragment
-    private lateinit var searchFragment: SearchFragment
+    fun getPicId(): Int? {
+        return picId
+    }
+
+    fun setCatId(catId: Int?) {
+        this.catId = catId
+    }
+
+    fun setPicId(picId: Int?) {
+        this.picId = picId
+    }
+}
+
+class MainActivity : AppCompatActivity() {
+
+    private var isReady: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        PreferenceManager.setDefaultValues(this, R.xml.jpics_prefs, true)
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
         setSupportActionBar(findViewById(R.id.my_toolbar))
 
-        bottomView = findViewById(R.id.bottom_nav)
-        bottomView.setOnItemSelectedListener { item ->
-            when(item.itemId) {
-                R.id.all_pictures -> showAllImagesTab()
-                R.id.albums -> showAlbumsTab()
-                R.id.search -> showSearchTab()
-            }
-            true
+        DatabaseProvider.initDB(applicationContext)
+
+        PiwigoServerHelper.initialize(Volley.newRequestQueue(this))
+
+        val prefs = getSharedPreferences("fr.curlyspiker.jpics", Context.MODE_PRIVATE)
+
+        val autoLogin = prefs.getBoolean("auto_login", false)
+        val url = prefs.getString("server_url", "") ?: ""
+        val username = prefs.getString("username", "") ?: ""
+        val password = prefs.getString("password", "") ?: ""
+        PiwigoServerHelper.serverUrl = url
+
+        findViewById<ImageButton>(R.id.account_button).setOnClickListener {
+            val action = HomeFragmentDirections.actionHomeFragmentToAccountFragment()
+            val navHostFragment = supportFragmentManager.findFragmentById(R.id.nav_host_fragment_container) as NavHostFragment
+            navHostFragment.navController.navigate(action)
         }
 
-        accountButton = findViewById(R.id.account_button)
-        accountButton.setOnClickListener {
-            val intent = Intent(this, AccountActivity::class.java)
-            ContextCompat.startActivity(this, intent, null)
-        }
-
-        if (savedInstanceState == null) {
-            allImagesFragment = AllImagesFragment()
-            searchFragment = SearchFragment()
-            if(PiwigoSession.logged) {
-                albumsFragment = ExplorerFragment(0)
-                bottomView.selectedItemId = R.id.albums
-            } else {
-                PiwigoSession.login("joss", "Cgyn76&cgyn76") {
-                    albumsFragment = ExplorerFragment(0)
-                    bottomView.selectedItemId = R.id.albums
-                }
-            }
-        } else {
-            allImagesFragment = (this.supportFragmentManager.findFragmentByTag("all_images") as AllImagesFragment?) ?: AllImagesFragment()
-            searchFragment = (this.supportFragmentManager.findFragmentByTag("search") as SearchFragment?) ?: SearchFragment()
-            albumsFragment = (this.supportFragmentManager.findFragmentByTag("albums") as ExplorerFragment?) ?: ExplorerFragment(0)
+        findViewById<ImageButton>(R.id.refresh_button).setOnClickListener {
+            refreshData()
         }
 
         val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
@@ -90,10 +98,6 @@ class MainActivity : BaseActivity() {
             requestPermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
 
-        lifecycleScope.launch(Dispatchers.IO) {
-            PiwigoData.refreshEverything ()
-        }
-
         when {
             intent?.action == Intent.ACTION_SEND -> {
                 if (intent.type?.startsWith("image/") == true) {
@@ -108,6 +112,34 @@ class MainActivity : BaseActivity() {
                 // Handle other intents, such as being started from the home screen
             }
         }
+
+        checkStatus {
+            if(PiwigoSession.logged) {
+                goToHome()
+            } else {
+                if(autoLogin) {
+                    login(url, username, password)
+                } else {
+                    goToLogin()
+                }
+            }
+
+        }
+
+        // Prevent first draw until first login has been attempted
+        val content: View = findViewById(android.R.id.content)
+        content.viewTreeObserver.addOnPreDrawListener(
+            object : ViewTreeObserver.OnPreDrawListener {
+                override fun onPreDraw(): Boolean {
+                    return if (isReady) {
+                        content.viewTreeObserver.removeOnPreDrawListener(this)
+                        true
+                    } else {
+                        false
+                    }
+                }
+            }
+        )
     }
 
     private fun handleSendImage(intent: Intent) {
@@ -183,27 +215,89 @@ class MainActivity : BaseActivity() {
 
         WorkManager
             .getInstance(applicationContext)
-            .enqueueUniquePeriodicWork("instant_upload", ExistingPeriodicWorkPolicy.REPLACE, instantUploadRequest)
+            .enqueueUniquePeriodicWork("jpics_instant_upload", ExistingPeriodicWorkPolicy.REPLACE, instantUploadRequest)
     }
 
-    private fun showAllImagesTab() {
-        val fragmentManager = supportFragmentManager
-        val transaction = fragmentManager.beginTransaction()
-        transaction.replace(R.id.fragment_container, allImagesFragment, "all_images")
-        transaction.commitAllowingStateLoss()
+    private fun goToLogin() {
+        proceedToApp(R.id.loginFragment)
     }
 
-    private fun showAlbumsTab() {
-        val fragmentManager = supportFragmentManager
-        val transaction = fragmentManager.beginTransaction()
-        transaction.replace(R.id.fragment_container, albumsFragment, "albums")
-        transaction.commitAllowingStateLoss()
+    private fun goToHome() {
+        proceedToApp(R.id.homeFragment)
     }
 
-    private fun showSearchTab() {
-        val fragmentManager = supportFragmentManager
-        val transaction = fragmentManager.beginTransaction()
-        transaction.replace(R.id.fragment_container, searchFragment, "search")
-        transaction.commitAllowingStateLoss()
+    private fun proceedToApp(startFragmentId: Int) {
+        val navHostFragment = supportFragmentManager.findFragmentById(R.id.nav_host_fragment_container) as NavHostFragment
+        val navController = navHostFragment.navController
+        val graph = navController.navInflater.inflate(R.navigation.nav_graph)
+        graph.setStartDestination(startFragmentId)
+        navController.graph = graph
+        isReady = true
+    }
+
+    fun logout() {
+        lifecycleScope.launch {
+            PiwigoAPI.pwgSessionLogout()
+            PiwigoSession.logged = false
+            PiwigoSession.token = ""
+            PiwigoSession.availableSizes.clear()
+            PiwigoSession.isAdmin = false
+
+            val prefs = getSharedPreferences("fr.curlyspiker.jpics", Context.MODE_PRIVATE)
+            prefs.edit().remove("username").apply()
+            prefs.edit().remove("password").apply()
+        }
+    }
+
+    fun login(url: String, username: String, password: String) {
+
+        PiwigoServerHelper.serverUrl = url
+
+        val prefs = getSharedPreferences("fr.curlyspiker.jpics", Context.MODE_PRIVATE)
+
+        prefs.edit().putString("server_url", url).apply()
+
+        lifecycleScope.launch {
+            PiwigoAPI.pwgSessionLogin(username, password)
+            checkStatus {
+                if(PiwigoSession.logged) {
+                    prefs.edit().putString("username", username).apply()
+                    prefs.edit().putString("password", password).apply()
+                    goToHome()
+                    refreshData()
+                } else {
+                    goToLogin()
+                }
+            }
+        }
+    }
+
+    private fun checkStatus(cb: () -> Unit) {
+        lifecycleScope.launch {
+            val rsp = PiwigoAPI.pwgSessionGetStatus()
+
+            val sizes = mutableListOf<String>()
+            val sizesArray = rsp.optJSONArray("available_sizes")
+            if (sizesArray != null) {
+                for (i in 0 until sizesArray.length()) {
+                    sizes.add(sizesArray[i].toString())
+                }
+            }
+
+            PiwigoSession.user = User(-1, rsp.optString("username", "unknown"))
+            PiwigoSession.isAdmin = rsp.optString("status", "guest") == "admin"
+            PiwigoSession.token = rsp.optString("pwg_token")
+            PiwigoSession.availableSizes = sizes.toMutableList()
+            PiwigoSession.logged = PiwigoSession.user.username != "guest" && PiwigoSession.user.username != "unknown"
+            Log.d("JP", "Connected user: ${PiwigoSession.user.username}")
+            cb()
+        }
+    }
+
+    private fun refreshData() {
+        InstantUploadManager.getInstance(this).checkForNewImages()
+        lifecycleScope.launch(Dispatchers.IO) {
+            PiwigoData.refreshEverything()
+        }
     }
 }

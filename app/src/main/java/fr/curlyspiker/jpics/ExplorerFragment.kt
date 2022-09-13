@@ -3,22 +3,18 @@ package fr.curlyspiker.jpics
 import android.app.AlertDialog
 import android.content.Context
 import android.os.Bundle
-import android.text.InputType
 import android.text.TextUtils
 import android.util.AttributeSet
 import android.view.*
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
-import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.ContextCompat
-import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.*
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.squareup.picasso.Picasso
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -26,7 +22,6 @@ import kotlinx.coroutines.launch
 
 class ExplorerViewModel(private var catId: Int) : ViewModel() {
 
-    private val refreshing = MutableLiveData<Boolean>()
     private val category = MutableLiveData<CategoryWithChildren>()
     private var loadJob: Job? = null
 
@@ -52,28 +47,9 @@ class ExplorerViewModel(private var catId: Int) : ViewModel() {
         return category
     }
 
-    fun isRefreshing(): LiveData<Boolean> {
-        return refreshing
-    }
-
-    fun refreshCategories() {
-        refreshing.postValue(true)
-        viewModelScope.launch(Dispatchers.IO) {
-            PiwigoData.refreshCategories() {
-                refreshing.postValue(false)
-            }
-        }
-    }
-
     fun setCategoryName(name: String) {
         viewModelScope.launch(Dispatchers.IO) {
             PiwigoData.setCategoryName(catId, name)
-        }
-    }
-
-    fun addCategory(name: String) {
-        viewModelScope.launch {
-            PiwigoData.addCategory(name, catId)
         }
     }
 
@@ -103,7 +79,6 @@ class ExplorerFragment (startCat: Int? = null) :
     private val explorerVM: ExplorerViewModel by viewModels { ExplorerViewModelFactory(startCat ?: 0) }
 
     private lateinit var mContext : Context
-    private lateinit var swipeContainer: SwipeRefreshLayout
 
     private lateinit var progressLayout: LinearLayout
     private lateinit var progressBar: ProgressBar
@@ -135,8 +110,6 @@ class ExplorerFragment (startCat: Int? = null) :
         progressBar = view.findViewById(R.id.progress_bar)
         progressTitle = view.findViewById(R.id.progress_title)
 
-        swipeContainer = view.findViewById(R.id.swipeContainer)
-
         albumTitleLayout = view.findViewById(R.id.album_title_layout)
         albumTitleEditLayout = view.findViewById(R.id.album_title_edit_layout)
         albumPathLayout = view.findViewById(R.id.album_path_layout)
@@ -159,29 +132,10 @@ class ExplorerFragment (startCat: Int? = null) :
         categoriesView.layoutManager = LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false)
         categoriesView.adapter  = categoriesAdapter
 
-        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                if(albumTitleEditLayout.isVisible) {
-                    setAlbumTitleEditMode(false)
-                } else {
-                    val parent = explorerVM.getCategory().value?.parent
-                    if (parent != null) {
-                        changeCategory(parent.catId)
-                    } else {
-                        activity?.moveTaskToBack(true)
-                    }
-                }
-            }
-        })
-
         val fragmentManager = requireActivity().supportFragmentManager
         val transaction = fragmentManager.beginTransaction()
         transaction.replace(R.id.image_list_fragment, imagesListFragment)
         transaction.commitAllowingStateLoss()
-
-        swipeContainer.setOnRefreshListener {
-            explorerVM.refreshCategories()
-        }
 
         categoriesAdapter?.selectionListener = object : CategoryListAdapter.SelectionListener {
 
@@ -227,12 +181,7 @@ class ExplorerFragment (startCat: Int? = null) :
             cat?.let {
                 categoriesAdapter?.refresh(cat.children)
                 updateViews(cat)
-                swipeContainer.visibility = if(swipeContainer.isRefreshing || cat.children.isNotEmpty()) View.VISIBLE else View.GONE
-            }
-        })
-        explorerVM.isRefreshing().observe(viewLifecycleOwner, Observer {
-            activity?.runOnUiThread {
-                swipeContainer.isRefreshing = it
+                categoriesView.visibility = if(cat.children.isNotEmpty()) View.VISIBLE else View.GONE
             }
         })
     }
@@ -288,27 +237,7 @@ class ExplorerFragment (startCat: Int? = null) :
         setAlbumTitleEditMode(false)
     }
 
-    fun addCategory() {
-        val builder: AlertDialog.Builder = AlertDialog.Builder(requireContext(), R.style.AlertStyle)
-        builder.setTitle("Create a new album")
 
-        val input = EditText(requireContext())
-        input.hint = "Name of new album"
-        input.inputType = InputType.TYPE_CLASS_TEXT
-        input.setTextColor(requireContext().getColor(R.color.white))
-        input.setHintTextColor(requireContext().getColor(R.color.light_gray))
-        builder.setView(input)
-
-        builder.setPositiveButton("OK") { dialog, _ ->
-            val name = input.text.toString()
-            explorerVM.addCategory(name)
-            dialog.dismiss()
-        }
-
-        builder.setNegativeButton("Cancel") { dialog, _ -> dialog.cancel() }
-
-        builder.show()
-    }
 
     fun deleteSelectedCategories() {
         categoriesAdapter?.let { adapter ->
@@ -432,46 +361,40 @@ class ExplorerFragment (startCat: Int? = null) :
         }
 
         override fun onBindViewHolder(vh: ViewHolder, position: Int) {
-            if(position == categories.size) {
-                vh.title.text = fragment.requireContext().getString(R.string.new_album)
-                vh.elementsLabel.text = ""
-                vh.icon.setImageDrawable(AppCompatResources.getDrawable(fragment.requireContext(), R.drawable.add))
-                vh.icon.setOnClickListener { fragment.addCategory() }
+
+            val item = categories[position]
+            val checkbox : CheckBox = vh.checkBox
+
+            checkbox.visibility = if(selecting) View.VISIBLE else View.INVISIBLE
+            checkbox.isChecked = item.checked
+            checkbox.setOnClickListener { setItemChecked(position, !item.checked) }
+
+            vh.title.text = item.cat.name
+            val nSubAlbums = item.cat.getChildren().size
+            vh.elementsLabel.text = if (nSubAlbums > 0) "$nSubAlbums sub-albums" else ""
+
+            if (item.cat.thumbnailUrl.isNotEmpty()) {
+                Picasso.with(fragment.requireContext()).load(item.cat.thumbnailUrl).into(vh.icon)
             } else {
-                val item = categories[position]
-                val checkbox : CheckBox = vh.checkBox
+                vh.icon.setImageDrawable(AppCompatResources.getDrawable(fragment.requireContext(), R.drawable.image_icon))
+            }
 
-                checkbox.visibility = if(selecting) View.VISIBLE else View.INVISIBLE
-                checkbox.isChecked = item.checked
-                checkbox.setOnClickListener { setItemChecked(position, !item.checked) }
-
-                vh.title.text = item.cat.name
-                val nSubAlbums = item.cat.getChildren().size
-                vh.elementsLabel.text = if (nSubAlbums > 0) "$nSubAlbums sub-albums" else ""
-
-                if (item.cat.thumbnailUrl.isNotEmpty()) {
-                    Picasso.with(fragment.requireContext()).load(item.cat.thumbnailUrl).into(vh.icon)
+            vh.icon.setOnClickListener {
+                if(!selecting) {
+                    fragment.changeCategory(item.cat.catId)
                 } else {
-                    vh.icon.setImageDrawable(AppCompatResources.getDrawable(fragment.requireContext(), R.drawable.image_icon))
+                    setItemChecked(position, !item.checked)
                 }
+            }
 
-                vh.icon.setOnClickListener {
-                    if(!selecting) {
-                        fragment.changeCategory(item.cat.catId)
-                    } else {
-                        setItemChecked(position, !item.checked)
-                    }
-                }
-
-                vh.icon.setOnLongClickListener {
-                    setItemChecked(position, true)
-                    true
-                }
+            vh.icon.setOnLongClickListener {
+                setItemChecked(position, true)
+                true
             }
         }
 
         override fun getItemCount(): Int {
-            return if(selecting) categories.size else categories.size + 1
+            return categories.size
         }
     }
 

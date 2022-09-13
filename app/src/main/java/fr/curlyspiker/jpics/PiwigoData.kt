@@ -77,10 +77,14 @@ object PiwigoData {
         // Add all new categories received from server
         DatabaseProvider.db.CategoryDao().insertOrReplace(categories)
 
+        var createInstantUploadCatAttempts = 0
         when {
             getInstantUploadCat() == null -> {
-                addCategory("JPicsInstantUpload", visible = false)
-                refreshCategories()
+                if (createInstantUploadCatAttempts < 2) {
+                    addCategory("JPicsInstantUpload", visible = false)
+                    createInstantUploadCatAttempts += 1
+                    refreshCategories()
+                }
             }
 
             else -> cb()

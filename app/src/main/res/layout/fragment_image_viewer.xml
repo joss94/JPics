@@ -3,9 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".ImageViewerActivity"
-    android:orientation="vertical"
-    android:fitsSystemWindows="true">
+    tools:context=".ImageViewerFragment">
 
     <androidx.viewpager.widget.ViewPager
         android:id="@+id/pager"

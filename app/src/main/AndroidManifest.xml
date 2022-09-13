@@ -26,35 +26,13 @@
         </provider>
 
         <activity
-            android:name=".ArchiveActivity"
-            android:exported="false" />
-        <activity
-            android:name=".BaseActivity"
-            android:exported="false" />
-        <activity
-            android:name=".SyncActivity"
-            android:exported="false" />
-        <activity
-            android:name=".SplashScreenActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-        <activity android:name=".AccountActivity" />
-        <activity android:name=".LoginActivity" />
-        <activity
-            android:name=".ImageViewerActivity"
-            android:theme="@style/ImageViewerTheme"
-            android:windowSoftInputMode="adjustPan|adjustResize" />
-        <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
                 <action android:name="android.intent.action.SEND" />
 
+                <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.DEFAULT" />
 
                 <data android:mimeType="image/*" />

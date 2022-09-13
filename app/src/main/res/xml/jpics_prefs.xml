@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <SwitchPreferenceCompat
+        app:key="use_wifi_only"
+        app:title="Wi-Fi only"
+        app:summary="Only do automatic updates when connected to Wi-Fi"
+        app:defaultValue="true"/>
+
+</PreferenceScreen>
