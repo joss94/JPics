@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Bundle
 import android.text.TextUtils
 import android.util.AttributeSet
+import android.util.Log
 import android.view.*
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
@@ -76,6 +77,21 @@ class ExplorerFragment (startCat: Int? = null) : Fragment() {
     private lateinit var albumEditConfirmButton: ImageButton
 
     private var imagesListFragment: ImageListFragment = ImageListFragment(startCat)
+
+    private val backPressedCallback = object : OnBackPressedCallback(true) {
+        override fun handleOnBackPressed() {
+            if(albumTitleEditLayout.isVisible) {
+                setAlbumTitleEditMode(false)
+            } else {
+                val parent = explorerVM.getCategory().value?.category?.parentId ?: -1
+                if (PiwigoData.getCategoryFromId(parent) != null) {
+                    changeCategory(parent)
+                } else {
+                    activity?.moveTaskToBack(true)
+                }
+            }
+        }
+    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_explorer, container, false)
@@ -163,6 +179,21 @@ class ExplorerFragment (startCat: Int? = null) : Fragment() {
                 categoriesView.visibility = if(cat.children.isNotEmpty()) View.VISIBLE else View.GONE
             }
         })
+
+        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, backPressedCallback)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        Log.d("Explorer", "On pause")
+
+        backPressedCallback.isEnabled = false
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Log.d("Explorer", "On resume")
+        backPressedCallback.isEnabled = true
     }
 
     private fun setAlbumTitleEditMode(editing: Boolean) {

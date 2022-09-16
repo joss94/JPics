@@ -114,8 +114,6 @@ class InstantUploadManager private constructor(val context: Context) {
         // Set ignore parameter
         allFolders.find { f -> f.name == syncFolder.name }?.ignored = syncFolder.ignored
 
-        Log.d("COUCOU", "$name   ${allFolders.find { f -> f.name == syncFolder.name }?.ignored}")
-
         // If the folder does not contain images (i.e., it is not in imageFolders), remove it
         // from the list, unless it is marked as "ignored", in this case we want to keep it because
         // it might receive images in the future

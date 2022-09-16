@@ -43,7 +43,6 @@ class HomeFragment : Fragment() {
 
     private val albumsFragment = ExplorerFragment(0)
     private val searchFragment = SearchFragment()
-    private val allFragment = AllImagesFragment()
     private var activeFragment: Fragment = albumsFragment
 
     override fun onCreateView(
@@ -57,13 +56,6 @@ class HomeFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
-
-        if (!allFragment.isAdded) {
-            val transaction = childFragmentManager.beginTransaction()
-            transaction.add(R.id.fragment_container, allFragment, "all_fragment")
-            transaction.commit()
-        }
 
         if (!searchFragment.isAdded) {
             val transaction = childFragmentManager.beginTransaction()
@@ -88,7 +80,6 @@ class HomeFragment : Fragment() {
                 bottomView.selectedItemId = it
             }
             when(it) {
-                R.id.all_pictures -> showAllImagesTab()
                 R.id.albums -> showAlbumsTab()
                 R.id.search -> showSearchTab()
             }
@@ -97,17 +88,8 @@ class HomeFragment : Fragment() {
         showAlbumsTab()
     }
 
-    private fun showAllImagesTab() {
-        childFragmentManager.beginTransaction()
-            .hide(searchFragment)
-            .hide(albumsFragment)
-            .show(allFragment).commit()
-        activeFragment = allFragment
-    }
-
     private fun showAlbumsTab() {
         childFragmentManager.beginTransaction()
-            .hide(allFragment)
             .hide(searchFragment)
             .show(albumsFragment).commit()
         activeFragment = albumsFragment
@@ -115,7 +97,6 @@ class HomeFragment : Fragment() {
 
     private fun showSearchTab() {
         childFragmentManager.beginTransaction()
-            .hide(allFragment)
             .hide(albumsFragment)
             .show(searchFragment).commit()
         activeFragment = searchFragment

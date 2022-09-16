@@ -84,18 +84,7 @@ object PiwigoData {
         // Add all new categories received from server
         DatabaseProvider.db.CategoryDao().insertOrReplace(categories)
 
-        var createInstantUploadCatAttempts = 0
-        when {
-            getInstantUploadCat() == null -> {
-                if (createInstantUploadCatAttempts < 2) {
-                    addCategory("JPicsInstantUpload", visible = false)
-                    createInstantUploadCatAttempts += 1
-                    refreshCategories()
-                }
-            }
-
-            else -> cb()
-        }
+        cb()
     }
 
     suspend fun addCategory(name: String, parentId: Int? = null, visible: Boolean = true): Int {
@@ -527,10 +516,6 @@ object PiwigoData {
         users.forEach { user ->
             DatabaseProvider.db.UserDao().insertOrReplace(user)
         }
-    }
-
-    fun getInstantUploadCat() : Int? {
-        return DatabaseProvider.db.CategoryDao().findByName("JPicsInstantUpload")?.catId
     }
 }
 
