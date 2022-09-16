@@ -8,11 +8,14 @@ import android.util.AttributeSet
 import android.view.*
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.*
+import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.squareup.picasso.Picasso
@@ -46,24 +49,6 @@ class ExplorerViewModel(private var catId: Int) : ViewModel() {
     fun getCategory(): LiveData<CategoryWithChildren> {
         return category
     }
-
-    fun setCategoryName(name: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            PiwigoData.setCategoryName(catId, name)
-        }
-    }
-
-    fun moveCategories(cats: List<Int>, dst: Int, listener: PiwigoData.ProgressListener) {
-        viewModelScope.launch(Dispatchers.IO) {
-            PiwigoData.moveCategories(cats, dst, listener)
-        }
-    }
-
-    fun deleteCategories(cats: List<Int>, listener: PiwigoData.ProgressListener) {
-        viewModelScope.launch(Dispatchers.IO) {
-            PiwigoData.deleteCategories(cats, listener)
-        }
-    }
 }
 
 class ExplorerViewModelFactory(private val catId: Int) :
@@ -73,16 +58,11 @@ class ExplorerViewModelFactory(private val catId: Int) :
     }
 }
 
-class ExplorerFragment (startCat: Int? = null) :
-    Fragment(), PiwigoData.ProgressListener {
+class ExplorerFragment (startCat: Int? = null) : Fragment() {
 
     private val explorerVM: ExplorerViewModel by viewModels { ExplorerViewModelFactory(startCat ?: 0) }
 
     private lateinit var mContext : Context
-
-    private lateinit var progressLayout: LinearLayout
-    private lateinit var progressBar: ProgressBar
-    private lateinit var progressTitle: TextView
 
     private lateinit var categoriesView: RecyclerView
     private var categoriesAdapter: CategoryListAdapter? = null
@@ -106,10 +86,6 @@ class ExplorerFragment (startCat: Int? = null) :
 
         mContext = requireContext()
 
-        progressLayout = view.findViewById(R.id.progress_layout)
-        progressBar = view.findViewById(R.id.progress_bar)
-        progressTitle = view.findViewById(R.id.progress_title)
-
         albumTitleLayout = view.findViewById(R.id.album_title_layout)
         albumTitleEditLayout = view.findViewById(R.id.album_title_edit_layout)
         albumPathLayout = view.findViewById(R.id.album_path_layout)
@@ -123,7 +99,9 @@ class ExplorerFragment (startCat: Int? = null) :
         }
 
         albumEditConfirmButton.setOnClickListener {
-            explorerVM.setCategoryName(albumTitleEdit.text.toString())
+            explorerVM.getCategory().value?.category?.catId?.let {
+                (activity as MainActivity).setCategoryName(it, albumTitleEdit.text.toString())
+            }
             setAlbumTitleEditMode(false)
         }
 
@@ -132,10 +110,11 @@ class ExplorerFragment (startCat: Int? = null) :
         categoriesView.layoutManager = LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false)
         categoriesView.adapter  = categoriesAdapter
 
-        val fragmentManager = requireActivity().supportFragmentManager
-        val transaction = fragmentManager.beginTransaction()
-        transaction.replace(R.id.image_list_fragment, imagesListFragment)
-        transaction.commitAllowingStateLoss()
+        if (savedInstanceState == null) {
+            val transaction = childFragmentManager.beginTransaction()
+            transaction.replace(R.id.image_list_fragment, imagesListFragment)
+            transaction.commitAllowingStateLoss()
+        }
 
         categoriesAdapter?.selectionListener = object : CategoryListAdapter.SelectionListener {
 
@@ -154,8 +133,8 @@ class ExplorerFragment (startCat: Int? = null) :
                     override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
                         var out = true
                         when (item?.itemId) {
-                            R.id.action_move -> moveSelectedCategories()
-                            R.id.action_delete -> deleteSelectedCategories()
+                            R.id.action_move -> (activity as MainActivity).moveCategories(categoriesAdapter?.getSelectedCategories() ?: listOf())
+                            R.id.action_delete -> (activity as MainActivity).deleteCategories(categoriesAdapter?.getSelectedCategories() ?: listOf())
                             else -> out = false
                         }
                         if(out) mode?.finish()
@@ -228,73 +207,12 @@ class ExplorerFragment (startCat: Int? = null) :
         }
 
         albumEditButton.visibility = if(cat.category.catId != 0) View.VISIBLE else View.GONE
-
     }
 
     fun changeCategory(c : Int) {
         explorerVM.setCategory(c)
         imagesListFragment.setCategory(c)
         setAlbumTitleEditMode(false)
-    }
-
-
-
-    fun deleteSelectedCategories() {
-        categoriesAdapter?.let { adapter ->
-            val selectedCategories = adapter.getSelectedCategories()
-            AlertDialog.Builder(requireContext(), R.style.AlertStyle)
-                .setTitle("Delete categories")
-                .setMessage("Are you sure you want to delete these categories?")
-                .setIcon(android.R.drawable.ic_dialog_alert)
-                .setPositiveButton("Yes") { _, _ ->
-                    explorerVM.deleteCategories(selectedCategories, this)
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
-        }
-    }
-
-    private fun moveSelectedCategories() {
-        categoriesAdapter?.let { adapter ->
-            val selectedCategories = adapter.getSelectedCategories()
-            val excludeList = selectedCategories.toMutableList()
-            explorerVM.getCategory().value?.let {excludeList.add(it.category.catId)}
-            selectCategory(excludeList) { c ->
-                c?.let {
-                    explorerVM.moveCategories(selectedCategories, c, this)
-                }
-            }
-        }
-    }
-
-    private fun selectCategory(excludeList : List<Int> = listOf(), callback: (cat: Int?) -> Unit) {
-
-        val dialog = CategoryPicker(requireContext())
-        dialog.setOnCategorySelectedCallback(callback)
-        dialog.excludeCategories(excludeList)
-        dialog.show()
-    }
-
-    override fun onStarted() {
-        activity?.runOnUiThread {
-            progressLayout.visibility = View.VISIBLE
-            progressBar.progress = 0
-            progressTitle.text = getString(R.string.processing_categories).format(0)
-        }
-    }
-
-    override fun onCompleted() {
-        activity?.runOnUiThread {
-            progressLayout.visibility = View.GONE
-        }
-    }
-
-    override fun onProgress(progress: Float) {
-        activity?.runOnUiThread {
-            val progressInt = (progress * 100).toInt()
-            progressBar.progress = progressInt
-            progressTitle.text = getString(R.string.processing_categories).format(progressInt)
-        }
     }
 
     class CategoryListAdapter(private val fragment: ExplorerFragment) :
@@ -315,7 +233,7 @@ class ExplorerFragment (startCat: Int? = null) :
         }
 
         fun refresh(cats: List<Category>) {
-            categories = cats.map { CategoryItem(it) }.toMutableList()
+            categories = cats.sortedBy { c -> c.globalRank }.map { CategoryItem(it) }.toMutableList()
             updateOnUIThread()
         }
 

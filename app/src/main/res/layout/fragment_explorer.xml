@@ -38,7 +38,7 @@
                         android:layout_height="wrap_content"
                         android:text="Album path"
                         android:textSize="30sp"
-                        android:layout_weight="1"/>
+                        android:layout_weight="1" />
 
                     <ImageButton
                     android:id="@+id/album_edit_button"

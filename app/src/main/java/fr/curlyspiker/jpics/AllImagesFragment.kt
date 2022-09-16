@@ -21,7 +21,7 @@ class AllImagesFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        val fragmentManager = requireActivity().supportFragmentManager
+        val fragmentManager = childFragmentManager
         val transaction = fragmentManager.beginTransaction()
         transaction.replace(R.id.image_list_fragment, imagesListFragment)
         transaction.commit()

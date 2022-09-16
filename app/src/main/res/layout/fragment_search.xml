@@ -15,7 +15,7 @@
         android:hint="Search by keywords..."
         android:layout_margin="5dp" />
 
-    <fragment
+    <androidx.fragment.app.FragmentContainerView
         android:id="@+id/image_list_fragment"
         android:name="fr.curlyspiker.jpics.ImageListFragment"
         android:layout_width="match_parent"

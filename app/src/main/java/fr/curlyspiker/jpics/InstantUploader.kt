@@ -1,21 +1,22 @@
 package fr.curlyspiker.jpics
 
+import android.content.ContentValues
 import android.content.Context
-import android.graphics.BitmapFactory
+import android.database.Cursor
 import android.net.Uri
 import android.provider.MediaStore
 import android.util.Log
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.lang.Exception
-import java.nio.file.Paths
 import java.util.*
+
 
 class InstantUploadManager private constructor(val context: Context) {
 
@@ -23,6 +24,7 @@ class InstantUploadManager private constructor(val context: Context) {
 
     private val allFolders = mutableListOf<SyncFolder>()
     private val imageFolders = mutableListOf<SyncFolder>()
+    private var defaultCatId: Int? = null
 
     init {
         val sharedPref = context.getSharedPreferences("jpics.InstantUpload", Context.MODE_PRIVATE)
@@ -41,6 +43,10 @@ class InstantUploadManager private constructor(val context: Context) {
             Log.d("IU", "Error loading InstantUploader preferences: $e")
         }
 
+    }
+
+    fun setDefaultCategory(id: Int?) {
+        defaultCatId = id
     }
 
     private fun saveToPreferences() {
@@ -73,61 +79,77 @@ class InstantUploadManager private constructor(val context: Context) {
     }
 
     fun isFolderIgnored(folder: String?) : Boolean {
-        allFolders.forEach { f ->
-            if(f.ignored && "${folder}//".contains(f.name)) {
-                return true
-            }
-        }
-        return false
+        return allFolders.any { f -> f.ignored && "${folder}//".contains(f.name) }
     }
 
     fun isFolderSynced(folder: String) : Boolean {
 
-        // If folder is not included in the list, or is ignored, then it is not synced
-        val matchingFolder = allFolders.firstOrNull { f -> f.name == folder }
-        if(matchingFolder == null || matchingFolder.ignored) {
+        // If folder is not included in the list, then it is not synced
+        if (!allFolders.any {f -> f.name == folder }) {
             return false
         }
 
-        // If parent folder is included in the list, and is not synced, then his child is not synced
-        val parentFolder = File(folder).parent!!
-        if(allFolders.firstOrNull { f -> f.name == parentFolder } != null && !isFolderSynced(parentFolder)) {
+        // If folder is ignored, then it is not synced
+        if(isFolderIgnored(folder)) {
             return false
         }
 
-        // If folder is in the list, and parent is not in the list, or indicated as synced, then folder is synced
+        // If parent folder is specifically ignored, then its children are ignored too
+        if(isFolderIgnored(File(folder).parent!!)) {
+            return false
+        }
+
+        // If all conditions passed, folder is synced*
         return true
     }
 
-    fun setFolderIgnored(folder: SyncFolder) {
-        val index = allFolders.indexOfFirst { f -> f.name == folder.name }
-        if(index == -1 && folder.ignored) {
-            allFolders.add(folder)
-        } else {
-            allFolders[index].ignored = folder.ignored
-            if(!folder.ignored && imageFolders.firstOrNull { f -> f.name == folder.name} == null) {
-                allFolders.removeAll { f -> f.name == folder.name }
-            }
-        }
+    fun setFolderIgnored(name: String, ignored: Boolean) {
+
+        val syncFolder = SyncFolder(name, ignored)
+
+        // Add the folder to the list if it does not exist
+        if(!allFolders.any { f -> f.name == syncFolder.name })
+            allFolders.add(syncFolder)
+
+        // Set ignore parameter
+        allFolders.find { f -> f.name == syncFolder.name }?.ignored = syncFolder.ignored
+
+        Log.d("COUCOU", "$name   ${allFolders.find { f -> f.name == syncFolder.name }?.ignored}")
+
+        // If the folder does not contain images (i.e., it is not in imageFolders), remove it
+        // from the list, unless it is marked as "ignored", in this case we want to keep it because
+        // it might receive images in the future
+        //if(!imageFolders.any { f -> f.name == syncFolder.name} && !syncFolder.ignored)
+        //    allFolders.removeAll { f -> f.name == syncFolder.name }
 
         saveToPreferences()
     }
 
     fun checkForNewImages() {
+        if (defaultCatId == null) {
+            Log.d("IU", "Not checking images, default cat is null")
+            return
+        }
+
+        val checkDate = Date()
+
+
         Log.d("IU", "Checking for new images")
         GlobalScope.launch(Dispatchers.IO) {
-            val imageList = findImages()
-            imageFolders.clear()
-            extractImagesFolders(imageList).forEach { f ->
-                imageFolders.add(SyncFolder(f, true))
-            }
 
+            // Get all images from device
+            val imageList = findImages()
+
+            // Get all folders corresponding to the image list
+            imageFolders.clear()
+            imageFolders.addAll(extractImagesFolders(imageList).map { f -> SyncFolder(f, true) })
+
+            // Build a list of
             imageFolders.forEach { f ->
-                if(allFolders.firstOrNull { it.name == f.name } == null) {
+                if(!allFolders.any { it.name == f.name }) {
                     allFolders.add(f)
                 }
             }
-
             allFolders.removeIf { f ->  imageFolders.firstOrNull { it.name == f.name } == null && !f.ignored }
 
             saveToPreferences()
@@ -135,49 +157,26 @@ class InstantUploadManager private constructor(val context: Context) {
             val sharedPref = context.getSharedPreferences("jpics.InstantUpload", Context.MODE_PRIVATE)
             val lastUpdate = sharedPref.getLong("last_update", 0L)
 
-            val notUpdated = imageList.filter { p -> File(p).lastModified() > lastUpdate }
-            notUpdated.sortedBy { p -> File(p).lastModified() }
-
-            val instantUploadCat = PiwigoData.getInstantUploadCat()
-            instantUploadCat?.let {
-                fun uploadNext(index: Int = 0) {
-                    if(index >= notUpdated.size) {
-                        return
-                    }
-
-                    val path = notUpdated[index]
-                    val folderPath = Uri.parse(File(path).parent).path
-                    if(isFolderSynced(folderPath?:"")) {
-
-                        Log.d("IU", "Syncing $path")
-
-                        val file = File(path)
-                        val createdTime = file.lastModified()
-
-                        // TODO: Fix bug
-                        /*
-                        PiwigoData.addImages(listOf(Uri.parse(path)), context.contentResolver, listOf(instantUploadCat), listener = object : PiwigoData.ProgressListener{
-                            override fun onStarted() {}
-
-                            override fun onCompleted() {
-                                with (sharedPref.edit()) {
-                                    putLong("last_update", createdTime)
-                                    apply()
-                                }
-                                uploadNext(index + 1)
-                            }
-
-                            override fun onProgress(progress: Float) {}
-
-                        })
-
-                         */
-                    } else {
-                        uploadNext(index + 1)
-                    }
+            val notUpdated = imageList
+                .filter { p ->
+                    val f = File(p)
+                    f.lastModified() > lastUpdate && isFolderSynced(Uri.parse(f.parent).path ?: "")
                 }
-                uploadNext()
+                .sortedBy { p -> File(p).lastModified() }
+
+            Log.d("IU", "Found ${notUpdated.size} images to sync")
+
+            defaultCatId?.let { catId ->
+                PiwigoData.addImagesFromFilePaths(notUpdated, listOf(catId))
+                sharedPref.edit().putLong("last_update", checkDate.time).apply()
             }
+        }
+    }
+
+    @OptIn(DelicateCoroutinesApi::class)
+    fun syncWithServer() {
+        GlobalScope.launch(Dispatchers.IO) {
+            PiwigoData.refreshEverything()
         }
     }
 
@@ -243,6 +242,7 @@ open class SingletonHolder<out T: Any, in A>(creator: (A) -> T) {
 
 class InstantUploaderWorker(appContext: Context, workerParams: WorkerParameters): Worker(appContext, workerParams) {
     override fun doWork(): Result {
+        InstantUploadManager.getInstance(applicationContext).syncWithServer()
         InstantUploadManager.getInstance(applicationContext).checkForNewImages()
         return Result.success()
     }

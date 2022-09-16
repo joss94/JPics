@@ -29,10 +29,10 @@ object PiwigoAPI {
         return PiwigoServerHelper.volleyPost(req)
     }
 
-    suspend fun pwgCategoriesGetImages(cats: List<Int>?, page: Int, perPage: Int, order: String): List<Picture> {
+    suspend fun jpicsCategoriesGetImages(cats: List<Int>?, page: Int, perPage: Int, order: String): List<Picture> {
         val req = JSONObject()
 
-        req.put("method", "pwg.categories.getImages")
+        req.put("method", "jpics.categories.getImages")
 
         cats?.let {
             req.put("cat_id", JSONArray(cats))

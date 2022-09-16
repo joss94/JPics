@@ -24,13 +24,10 @@ class SearchFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        val transaction = childFragmentManager.beginTransaction().replace(R.id.image_list_fragment, imagesListFragment)
+        transaction.commit()
+
         keywordsEdit = view.findViewById(R.id.keywords_edit)
-
-        val fragmentManager = requireActivity().supportFragmentManager
-        val transaction = fragmentManager.beginTransaction()
-        transaction.replace(R.id.image_list_fragment, imagesListFragment)
-        transaction.commitAllowingStateLoss()
-
         keywordsEdit.doOnTextChanged { text, _, _, _ -> imagesListFragment.setFilter(text.toString()) }
     }
 }

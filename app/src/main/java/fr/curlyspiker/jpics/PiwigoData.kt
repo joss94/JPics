@@ -1,6 +1,7 @@
 package fr.curlyspiker.jpics
 
 import android.content.ContentResolver
+import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
@@ -8,6 +9,8 @@ import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.util.Base64
 import android.util.Log
+import org.json.JSONObject
+import java.io.File
 import java.util.*
 
 object PiwigoData {
@@ -18,9 +21,13 @@ object PiwigoData {
         fun onProgress(progress: Float)
     }
 
-    var currentlyDisplayedList: MutableList<Int> = Collections.synchronizedList(mutableListOf<Int>())
+    private var progressListener: ProgressListener? = null
 
     private var homeCat = Category(0, "Home")
+
+    fun setProgressListener(listener: ProgressListener) {
+        progressListener = listener
+    }
 
     suspend fun refreshEverything() {
         refreshUsers ()
@@ -32,7 +39,7 @@ object PiwigoData {
     suspend fun refreshPictures(cats: List<Int>?, cb: () -> Unit = {}): List<Picture> {
         val pictures = Collections.synchronizedList(mutableListOf<Picture>())
         suspend fun getPicturesNextPage(page: Int = 0) {
-            val pics = PiwigoAPI.pwgCategoriesGetImages(cats, page = page, perPage = 500, order = "date_creation")
+            val pics = PiwigoAPI.jpicsCategoriesGetImages(cats, page = page, perPage = 500, order = "date_creation")
             pictures.addAll(pics)
             if(pics.size == 500) {
                 getPicturesNextPage(page + 1)
@@ -43,17 +50,17 @@ object PiwigoData {
 
         // Delete pics that are not on the server anymore
         val picIds = pictures.map { p -> p.picId }
-        if(cats != null) {
-            DatabaseProvider.db.PictureCategoryDao().deletePicsNotInListFromCats(picIds.toIntArray(), cats.toIntArray())
-        } else {
-            DatabaseProvider.db.PictureCategoryDao().deletePicsNotInList(picIds.toIntArray())
+        if(cats == null) {
+            DatabaseProvider.db.PictureDao().deleteNotInList(picIds)
         }
 
         val picCats = mutableListOf<PictureCategoryCrossRef>()
         pictures.forEach { p ->
-            p.getCategoriesFromInfoJson().forEach { catId ->
+            val pictureCats = p.getCategoriesFromInfoJson()
+            pictureCats.forEach { catId ->
                 picCats.add(PictureCategoryCrossRef(p.picId, catId))
             }
+            DatabaseProvider.db.PictureCategoryDao().removePicFromOtherCategories(p.picId, pictureCats.toIntArray())
         }
 
         DatabaseProvider.db.PictureDao().insertOrReplace(pictures)
@@ -100,29 +107,29 @@ object PiwigoData {
         return id
     }
 
-    suspend fun deleteCategories(cats: List<Int>, listener: ProgressListener? = null) {
+    suspend fun deleteCategories(cats: List<Int>) {
         suspend fun deleteNext(index: Int = 0) {
             if(index >= cats.size) {
-                listener?.onCompleted()
+                progressListener?.onCompleted()
             } else {
                 val cat = cats[index]
                 PiwigoAPI.pwgCategoriesDelete(cat, PiwigoSession.token)
                 DatabaseProvider.db.CategoryDao().deleteFromId(cat)
                 DatabaseProvider.db.PictureCategoryDao().deleteCat(cat)
-                listener?.onProgress(index.toFloat() / cats.size)
+                progressListener?.onProgress(index.toFloat() / cats.size)
                 deleteNext(index + 1)
             }
         }
 
-        listener?.onStarted()
+        progressListener?.onStarted()
         deleteNext()
     }
 
-    suspend fun moveCategories(cats: List<Int>, parentId: Int, listener : ProgressListener? = null) {
+    suspend fun moveCategories(cats: List<Int>, parentId: Int) {
 
         suspend fun moveNext(index: Int = 0) {
             if(index >= cats.size) {
-                listener?.onCompleted()
+                progressListener?.onCompleted()
             } else {
                 val catID = cats[index]
                 PiwigoAPI.pwgCategoriesMove(catID, PiwigoSession.token, parentId)
@@ -130,12 +137,12 @@ object PiwigoData {
                     cat.parentId = parentId
                     DatabaseProvider.db.CategoryDao().update(cat)
                 }
-                listener?.onProgress(index.toFloat() / cats.size)
+                progressListener?.onProgress(index.toFloat() / cats.size)
                 moveNext(index + 1)
             }
         }
 
-        listener?.onStarted()
+        progressListener?.onStarted()
         moveNext()
     }
 
@@ -170,6 +177,10 @@ object PiwigoData {
         return DatabaseProvider.db.PictureDao().loadOneById(id)
     }
 
+    fun getPicturesFromIds(ids: List<Int>): List<Picture> {
+        return DatabaseProvider.db.PictureDao().loadManyById(ids)
+    }
+
     fun getPictureCategories(id: Int, recursive: Boolean = false): List<Int> {
         val out = mutableListOf<Int>()
         val directParents = DatabaseProvider.db.PictureCategoryDao().getParentsIds(id)
@@ -188,12 +199,12 @@ object PiwigoData {
         return out
     }
 
-    fun getCategoriesRepresentedByPic(picId: Int) : List<Int> {
-        return DatabaseProvider.db.PictureCategoryDao().getCategoriesRepresentedByPic(picId)
+    suspend fun getPictureInfo(picId: Int): JSONObject {
+        return PiwigoAPI.pwgImagesGetInfo(picId)
     }
 
-    fun getArchivedIds(): List<Int> {
-        return DatabaseProvider.db.PictureDao().getArchivedIds()
+    private fun getCategoriesRepresentedByPic(picId: Int) : List<Int> {
+        return DatabaseProvider.db.PictureCategoryDao().getCategoriesRepresentedByPic(picId)
     }
 
     fun getTagFromId(id: Int): PicTag? {
@@ -220,7 +231,7 @@ object PiwigoData {
         img: PiwigoAPI.ImageUploadData,
         cats: List<Int>? = null,
         tags: List<Int>? = null,
-        listener: ProgressListener? = null
+        listener: ProgressListener?
     ) {
         val bmp = img.bmp
         val bytes = Utils.imgToByteArray(bmp)
@@ -270,58 +281,84 @@ object PiwigoData {
         }
     }
 
-    suspend fun addImages(
+    suspend fun addImagesFromContentUris(
         imgs: List<Uri>,
         contentResolver: ContentResolver,
         cats: List<Int>? = null,
-        tags: List<Int>? = null,
-        listener: ProgressListener? = null
+        tags: List<Int>? = null
     ) {
 
-        suspend fun addNext(index: Int = 0) {
-            if(index >= imgs.size) {
-                listener?.onCompleted()
+        val imagesUploadData = imgs.mapNotNull { uri ->
+            var filename = ""
+            var date = Calendar.getInstance().time.time
+
+            val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val source = ImageDecoder.createSource(contentResolver, uri)
+                ImageDecoder.decodeBitmap(source)
             } else {
-                val uri = imgs[index]
-                val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    val source = ImageDecoder.createSource(contentResolver, uri)
-                    ImageDecoder.decodeBitmap(source)
-                } else {
-                    MediaStore.Images.Media.getBitmap(contentResolver, uri)
-                }
+                MediaStore.Images.Media.getBitmap(contentResolver, uri)
+            }
 
-                var filename = ""
-                var date = Calendar.getInstance().time.time
+            val cursor = contentResolver.query(uri, null, null, null, null)
+            if(cursor != null) {
+                cursor.moveToFirst()
 
-                val cursor = contentResolver.query(uri, null, null, null, null)
-                if(cursor != null) {
-                    cursor.moveToFirst()
-
-                    val dateIndex: Int = cursor.getColumnIndexOrThrow("last_modified")
+                try {
+                    val dateIndex: Int = cursor.getColumnIndex("last_modified")
                     date = cursor.getString(dateIndex).toLong()
+                } catch (e: Exception) {}
 
-                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    filename = cursor.getString(nameIndex)
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                filename = cursor.getString(nameIndex)
 
-                    cursor.close()
-                }
+                cursor.close()
+            }
 
-                val img = PiwigoAPI.ImageUploadData(bitmap, filename, Date(date), creationDate = Date(date))
-                addImage(img, cats, tags, object : ProgressListener {
+            if (filename != "") PiwigoAPI.ImageUploadData(bitmap, filename, Date(date), creationDate = Date(date)) else null
+        }
+        addImages(imagesUploadData, cats, tags)
+    }
+
+    suspend fun addImagesFromFilePaths(
+        imgs: List<String>,
+        cats: List<Int>? = null,
+        tags: List<Int>? = null
+    ) {
+        val imagesUploadData = imgs.mapNotNull { path ->
+            val filename = File(path).name
+            val bitmap = BitmapFactory.decodeFile(path)
+            val date = File(path).lastModified()
+
+            if (filename != "") PiwigoAPI.ImageUploadData(bitmap, filename, Date(date), creationDate = Date(date)) else null
+        }
+        addImages(imagesUploadData, cats, tags)
+    }
+
+    private suspend fun addImages(imgs: List<PiwigoAPI.ImageUploadData>,
+                  cats: List<Int>? = null,
+                  tags: List<Int>? = null) {
+
+        suspend fun addNext(index: Int = 0) {
+            if (index >= imgs.size) {
+                progressListener?.onCompleted()
+            } else {
+                addImage(imgs[index], cats, tags, object : ProgressListener {
                     override fun onStarted() {
                     }
+
                     override fun onCompleted() {
-                        listener?.onProgress( ((index + 1).toFloat()) / imgs.size )
+                        progressListener?.onProgress(((index + 1).toFloat()) / imgs.size)
                     }
+
                     override fun onProgress(progress: Float) {
-                        listener?.onProgress( (index.toFloat() + progress) / imgs.size )
+                        progressListener?.onProgress((index.toFloat() + progress) / imgs.size)
                     }
                 })
                 addNext(index + 1)
             }
         }
 
-        listener?.onStarted()
+        progressListener?.onStarted()
         addNext()
     }
 

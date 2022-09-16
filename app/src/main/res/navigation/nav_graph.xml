@@ -11,7 +11,8 @@
         tools:layout="@layout/fragment_home" >
         <action
             android:id="@+id/action_homeFragment_to_accountFragment"
-            app:destination="@id/accountFragment" />
+            app:destination="@id/accountFragment"
+            app:popUpTo="@id/homeFragment" />
     </fragment>
     <fragment
         android:id="@+id/accountFragment"
@@ -40,11 +41,6 @@
         tools:layout="@layout/fragment_sync" />
 
     <fragment
-        android:id="@+id/imageListFragment"
-        android:name="fr.curlyspiker.jpics.ImageListFragment"
-        android:label="image_list_fragment"
-        tools:layout="@layout/fragment_image_list" />
-    <fragment
         android:id="@+id/imageViewerFragment"
         android:name="fr.curlyspiker.jpics.ImageViewerFragment"
         android:label="fragment_image_viewer"
@@ -57,6 +53,8 @@
         tools:layout="@layout/fragment_login" />
 
 
+
+
     <!-- Global Actions -->
     <action
         android:id="@+id/action_showImageViewer"
@@ -66,6 +64,10 @@
     <action
         android:id="@+id/action_goToLogin"
         app:destination="@id/loginFragment" />
+
+    <action
+        android:id="@+id/action_goToAccount"
+        app:destination="@id/accountFragment" />
 
     <action
         android:id="@+id/action_goToHome"

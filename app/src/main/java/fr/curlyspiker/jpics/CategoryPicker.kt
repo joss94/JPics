@@ -1,105 +1,137 @@
 package fr.curlyspiker.jpics
 
-import android.app.Dialog
-import android.content.Context
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.InsetDrawable
 import android.os.Bundle
+import android.view.*
+import android.widget.*
 import androidx.appcompat.content.res.AppCompatResources
+import androidx.fragment.app.DialogFragment
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.*
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.squareup.picasso.Picasso
-import android.graphics.drawable.InsetDrawable
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import org.w3c.dom.Text
 
-import android.graphics.drawable.ColorDrawable
-import android.view.*
-import android.widget.*
+class CatPickerViewModel: ViewModel() {
 
+    private var catId = 0
+    private val currentCat = MutableLiveData<Category>()
+    private var excludedCats = listOf<Int>()
+    private var children = MutableLiveData<List<Int>>()
 
-class CategoryPicker(context: Context) : Dialog(context) {
+    fun getCurrentCat(): LiveData<Category> {
+        return currentCat
+    }
 
-    private var excludedCategories = mutableListOf<Int>()
+    fun getChildren(): LiveData<List<Int>> {
+        return children
+    }
 
-    private lateinit var categoriesView: RecyclerView
-    private lateinit var categoriesAdapter: SelectCategoryListAdapter
-    private lateinit var categoryName: TextView
-    private lateinit var backButton: ImageButton
+    fun excludeCategories(cats: List<Int>) {
+        excludedCats = cats
+        loadChildren()
+    }
 
-    private var catSelectedCb: (c: Int) -> Unit = {}
+    private fun loadChildren() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cat = PiwigoData.getCategoryFromId(catId)
+            cat?.let {
+                val catChildren = cat.getChildren().filter { id -> !excludedCats.contains(id) }.toMutableList()
+                currentCat.postValue(it)
+                children.postValue(catChildren)
+            }
+        }
+    }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        requestWindowFeature(Window.FEATURE_NO_TITLE)
-        setContentView(R.layout.dialog_category_picker)
+    fun setCurrentCat(catId: Int) {
+        this.catId = catId
+        loadChildren()
+    }
 
-        findViewById<Button>(R.id.cancel_button).setOnClickListener { dismiss() }
-        findViewById<Button>(R.id.ok_button).setOnClickListener {
+    fun goToParent() {
+        currentCat.value?.parentId?.let { setCurrentCat(it) }
+    }
+}
+
+class CategoryPicker(private val startCat: Int = 0, private val catSelectedCb: (c: Int) -> Unit) : DialogFragment() {
+
+    private val pickerVM: CatPickerViewModel by viewModels()
+
+    private var categoriesAdapter: SelectCategoryListAdapter = SelectCategoryListAdapter(this)
+
+    override fun onCreateView(
+        inflater: LayoutInflater, container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        return inflater.inflate(R.layout.dialog_category_picker, container)
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        view.findViewById<Button>(R.id.cancel_button).setOnClickListener { dismiss() }
+        view.findViewById<Button>(R.id.ok_button).setOnClickListener {
             catSelectedCb(categoriesAdapter.getSelectedCat())
             dismiss()
         }
 
-        backButton = findViewById(R.id.back_button)
+        val backButton = view.findViewById<ImageButton>(R.id.back_button)
         backButton.setOnClickListener {
-            categoriesAdapter.goToParent()
+            pickerVM.goToParent()
         }
 
-        categoryName = findViewById(R.id.category_title)
+        val categoryName = view.findViewById<TextView>(R.id.category_title)
 
-        categoriesView = findViewById(R.id.categories_list_view)
-        categoriesAdapter = SelectCategoryListAdapter(this)
+        val categoriesView = view.findViewById<RecyclerView>(R.id.categories_list_view)
         categoriesView.layoutManager = LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false)
         categoriesView.adapter  = categoriesAdapter
 
-        categoriesAdapter.refresh()
-
-        window?.setLayout(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        dialog?.window?.setLayout(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
 
         val back = ColorDrawable(Color.TRANSPARENT)
         val inset = InsetDrawable(back, 100)
-        window?.setBackgroundDrawable(inset)
-        window?.setGravity(Gravity.CENTER)
-    }
+        dialog?.window?.setBackgroundDrawable(inset)
+        dialog?.window?.setGravity(Gravity.CENTER)
 
-    private fun onCategoryChanged() {
-        categoryName.text = categoriesAdapter.getCurrentCat()?.name
-        backButton.visibility = if(PiwigoData.getCategoryFromId(categoriesAdapter.getCurrentCat()?.parentId ?: -1) == null) View.INVISIBLE else View.VISIBLE
-    }
+        pickerVM.getCurrentCat().observe(viewLifecycleOwner, Observer { cat ->
+            categoryName.text = cat?.name
+            backButton.visibility = if (cat?.parentId != null) View.VISIBLE else View.INVISIBLE
+            categoriesAdapter.setSelectedCat(cat.catId)
+        })
 
-    fun setOnCategorySelectedCallback(cb: (c: Int) -> Unit) {
-        catSelectedCb = cb
+        pickerVM.getChildren().observe(viewLifecycleOwner, Observer{ cats ->
+            categoriesAdapter.refresh(cats)
+        })
+
+        pickerVM.setCurrentCat(startCat)
     }
 
     fun excludeCategories(cats: List<Int>) {
-        excludedCategories = cats.toMutableList()
-        if(this::categoriesAdapter.isInitialized){
-            categoriesAdapter.refresh()
-        }
+        pickerVM.excludeCategories(cats)
     }
 
     class SelectCategoryListAdapter(private val picker: CategoryPicker) :
         RecyclerView.Adapter<SelectCategoryListAdapter.ViewHolder>(){
 
-        private var catIDs = mutableListOf<Int>()
-        private var currentCategory = 0
-        private var selectedCategory = currentCategory
-
-        fun getCurrentCat() : Category? {
-            return PiwigoData.getCategoryFromId(currentCategory)
-        }
+        private var catIDs = listOf<Int>()
+        private var selectedCategory: Int = 0
 
         fun getSelectedCat() : Int {
             return selectedCategory
         }
 
-        fun goToParent() {
-            currentCategory = getCurrentCat()?.parentId ?: currentCategory
-            selectedCategory = currentCategory
-            refresh()
+        fun setSelectedCat(catId: Int) {
+            selectedCategory = catId
         }
 
-        fun refresh() {
-            catIDs = (getCurrentCat()?.getChildren()?.filter { id -> id !in picker.excludedCategories }?.toMutableList() ?: listOf()).toMutableList()
+        fun refresh(cats: List<Int>) {
+            catIDs = cats
             notifyDataSetChanged()
-            picker.onCategoryChanged()
         }
 
         class ViewHolder (view: View) : RecyclerView.ViewHolder(view) {
@@ -125,23 +157,18 @@ class CategoryPicker(context: Context) : Dialog(context) {
                 if (category.thumbnailUrl.isNotEmpty()) {
                     Picasso.with(picker.context).load(category.thumbnailUrl).into(vh.icon)
                 } else {
-                    vh.icon.setImageDrawable(AppCompatResources.getDrawable(picker.context, R.drawable.image_icon))
+                    vh.icon.setImageDrawable(AppCompatResources.getDrawable(picker.requireContext(), R.drawable.image_icon))
                 }
-
-                vh.itemView.setBackgroundColor(picker.context.getColor(if(selectedCategory == catId) R.color.dark_blue else R.color.transparent))
+                vh.itemView.setBackgroundColor(picker.requireContext().getColor(if(selectedCategory == catId) R.color.dark_blue else R.color.transparent))
 
                 vh.mainLayout.setOnClickListener {
                     selectedCategory = catId
-                    refresh()
+                    notifyDataSetChanged()
                 }
 
                 vh.openCatButton.visibility = if(category.getChildren().isNotEmpty()) View.VISIBLE else View.INVISIBLE
                 vh.openCatButton.setOnClickListener {
-                    if(category.getChildren().isNotEmpty()) {
-                        currentCategory = catId
-                        selectedCategory = catId
-                        refresh()
-                    }
+                    picker.pickerVM.setCurrentCat(catId)
                 }
             }
         }
@@ -150,5 +177,4 @@ class CategoryPicker(context: Context) : Dialog(context) {
             return catIDs.size
         }
     }
-
 }

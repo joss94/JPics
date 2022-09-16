@@ -8,7 +8,8 @@ import org.json.JSONObject
 data class Category (
     @PrimaryKey val catId: Int,
     var name: String,
-    @ColumnInfo(name = "parent_id") var parentId: Int = -1
+    @ColumnInfo(name = "parent_id") var parentId: Int = -1,
+    @ColumnInfo(name = "global_rank") var globalRank: Int = -1
 ) {
 
     var thumbnailId: Int = -1
@@ -32,6 +33,7 @@ data class Category (
             val c = Category(id, name, parentId)
             c.thumbnailId = json.optString("representative_picture_id").toIntOrNull()?:-1
             c.thumbnailUrl = json.optString("tn_url")
+            c.globalRank = json.optInt("global_rank", -1)
 
             return c
         }

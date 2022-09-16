@@ -84,7 +84,7 @@ interface PictureDao {
     fun loadOneById(picId: Int): Picture?
 
     @Query("SELECT * FROM picture WHERE picId IN (:picIds)")
-    fun loadManyById(picIds: List<Int>): List<Picture?>
+    fun loadManyById(picIds: List<Int>): List<Picture>
 
     @Insert
     fun insertAll(vararg picture: Picture)
@@ -115,6 +115,9 @@ interface PictureDao {
 
     @Query("DELETE FROM picture WHERE picId=:id")
     fun deleteFromId(id: Int)
+
+    @Query("DELETE FROM picture WHERE picId NOT IN (:ids)")
+    fun deleteNotInList(ids: List<Int>)
 }
 
 @Dao
@@ -142,7 +145,10 @@ interface PictureCategoryDao {
     }
 
     @Query("DELETE FROM picture_category_cross_ref WHERE picId NOT IN (:picIds) AND catId IN (:catIds)")
-    fun deletePicsNotInListFromCats(picIds: IntArray, catIds: IntArray)
+    fun deletePicsNotInListCatInList(picIds: List<Int>, catIds: List<Int>)
+
+    @Query("DELETE FROM picture_category_cross_ref WHERE picId=:picId AND catId NOT IN (:catIds)")
+    fun removePicFromOtherCategories(picId: Int, catIds: IntArray)
 
     @Query("DELETE FROM picture_category_cross_ref WHERE picId NOT IN (:picIds)")
     fun deletePicsNotInList(picIds: IntArray)
@@ -269,7 +275,8 @@ interface UserDao {
     fun deleteIdsNotInList(userIds: List<Int>)
 }
 
-@Database(entities = [Category::class, Picture::class, PictureCategoryCrossRef::class, PicTag::class, PictureTagCrossRef::class, User::class], version = 8)
+@Database(entities = [Category::class, Picture::class, PictureCategoryCrossRef::class, PicTag::class, PictureTagCrossRef::class, User::class],
+    version = 9)
 @TypeConverters(Converters::class)
 abstract class JPicsDatabase : RoomDatabase() {
     abstract fun CategoryDao(): CategoryDao
