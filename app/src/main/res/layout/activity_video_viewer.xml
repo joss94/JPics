@@ -6,9 +6,8 @@
     android:layout_height="match_parent"
     tools:context=".VideoViewerActivity">
 
-    <com.google.android.exoplayer2.ui.PlayerView
-        android:id="@+id/video_view"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"/>
+
+
+
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -72,7 +72,7 @@ interface CategoryDao {
 interface PictureDao {
 
     @Query("SELECT picId FROM picture ORDER BY creationDate")
-    fun getAllIds(): Flow<List<Int>>
+    fun getAllIds(): List<Int>
 
     @Query("SELECT * FROM picture ORDER BY creationDate")
     fun getAllPictures(): Flow<List<Picture>>
@@ -116,8 +116,8 @@ interface PictureDao {
     @Query("DELETE FROM picture WHERE picId=:id")
     fun deleteFromId(id: Int)
 
-    @Query("DELETE FROM picture WHERE picId NOT IN (:ids)")
-    fun deleteNotInList(ids: List<Int>)
+    @Query("DELETE FROM picture WHERE picId IN (:ids)")
+    fun deleteAll(ids: List<Int>)
 }
 
 @Dao
@@ -220,11 +220,29 @@ interface TagDao {
 @Dao
 interface PictureTagDao {
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun insertOrReplace(vararg picCat: PictureTagCrossRef)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    fun insert(picTag: PictureTagCrossRef): Long
 
-    @Query("DELETE FROM picture_tag_cross_ref WHERE picId NOT IN (:picIds) AND tagId IN (:tagIds)")
-    fun deletePicsNotInCats(picIds: IntArray, tagIds: IntArray)
+    @Update
+    fun update(picTag: PictureTagCrossRef?)
+
+    @Transaction
+    fun insertOrReplace(picTag: PictureTagCrossRef) {
+        val id: Long = insert(picTag)
+        if (id == -1L) {
+            update(picTag)
+        }
+    }
+
+    @Transaction
+    fun insertOrReplace(picTags: List<PictureTagCrossRef>) {
+        for (picTag in picTags) {
+            insertOrReplace(picTag)
+        }
+    }
+
+    @Query("DELETE FROM picture_tag_cross_ref WHERE tagId=:tagId AND picId NOT IN (:picIds)")
+    fun removeTagFromOtherPics(tagId: Int, picIds: List<Int>)
 
     @Query("DELETE FROM picture_tag_cross_ref WHERE tagId=:tagId")
     fun deleteCat(tagId: Int)

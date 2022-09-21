@@ -1,27 +1,36 @@
 package fr.curlyspiker.jpics
 
 import android.app.AlertDialog
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
 import android.util.Log
 import android.view.*
 import android.widget.*
+import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.fragment.app.activityViewModels
-import androidx.lifecycle.Observer
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.viewpager.widget.PagerAdapter
 import androidx.viewpager.widget.ViewPager
+import com.google.android.exoplayer2.ExoPlayer
+import com.google.android.exoplayer2.MediaItem
+import com.google.android.exoplayer2.ui.StyledPlayerView
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.squareup.picasso.Picasso
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.lang.Integer.max
+import java.io.File
+import java.io.FileOutputStream
 import java.lang.Integer.min
 import java.text.SimpleDateFormat
 import java.util.*
@@ -45,6 +54,8 @@ class ImageViewerFragment : Fragment() {
     private lateinit var infoTags : TextView
 
     private var currentPicId : Int = -1
+
+    private lateinit var player: ExoPlayer
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -114,34 +125,26 @@ class ImageViewerFragment : Fragment() {
             }
         }
 
-        requireActivity().startActionMode(object : ActionMode.Callback{
-            override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
-                val menuInflater: MenuInflater? = mode?.menuInflater
-                menuInflater?.inflate(R.menu.viewer_menu, menu)
-                return true
+        view.findViewById<Toolbar>(R.id.my_toolbar).setOnMenuItemClickListener { item ->
+            var out = true
+            when (item?.itemId) {
+                R.id.action_share -> (activity as MainActivity).shareImages(listOf(currentPicId))
+                R.id.action_download -> (activity as MainActivity).downloadImages(listOf(currentPicId))
+                R.id.action_move -> (activity as MainActivity).moveImages(null, listOf(currentPicId))
+                R.id.action_delete -> (activity as MainActivity).archiveImages(listOf(currentPicId))
+                R.id.action_info -> infoDialog.show()
+                else -> out = false
             }
+            out
+        }
 
-            override fun onPrepareActionMode(p0: ActionMode?, p1: Menu?): Boolean { return true }
-
-            override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
-                var out = true
-                when (item?.itemId) {
-                    R.id.action_share -> currentPic()?.let { (activity as MainActivity).shareImages(listOf(it)) }
-                    R.id.action_download -> (activity as MainActivity).downloadImages(listOf(currentPicId))
-                    R.id.action_move -> (activity as MainActivity).moveImages(null, listOf(currentPicId))
-                    R.id.action_delete -> (activity as MainActivity).archiveImages(listOf(currentPicId))
-                    R.id.action_info -> infoDialog.show()
-                    else -> out = false
-                }
-                mode?.finish()
-                return out
-            }
-
-            override fun onDestroyActionMode(p0: ActionMode?) {}
-        })
+        view.findViewById<ImageButton>(R.id.back_button).setOnClickListener {
+            findNavController().popBackStack()
+        }
 
         pagerAdapter = ImageViewerPager(this)
         pager.adapter = pagerAdapter
+        pager.offscreenPageLimit = 2
 
         pager.addOnPageChangeListener(object: ViewPager.OnPageChangeListener {
             override fun onPageScrolled(position: Int, positionOffset: Float, positionOffsetPixels: Int) {}
@@ -161,16 +164,21 @@ class ImageViewerFragment : Fragment() {
                 pager.adapter = pagerAdapter
 
                 currentPicId = mainActivityVM.getPicId() ?: -1
-                val currentIndex = it.indexOfFirst { p -> p.picId == currentPicId }
-                if (currentIndex != -1) {
-                    pager.currentItem = currentIndex
-                } else {
-                    pager.currentItem = min(oldIndex, pagerAdapter.count - 1)
-                }
-
+                val currentIdx = it.indexOfFirst { p -> p.picId == currentPicId }
+                pager.currentItem = if (currentIdx != -1) currentIdx else min(oldIndex, pagerAdapter.count - 1)
                 updateBottomSheet()
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        player = ExoPlayer.Builder(requireActivity()).build()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        player.release()
     }
 
     private fun currentPic() : Picture? {
@@ -228,18 +236,31 @@ class ImageViewerFragment : Fragment() {
 
             val itemView =  if (pic.isVideo()) {
                 val v: View = inflater.inflate(R.layout.image_viewer_page_video, container, false)
-                val videoView = v.findViewById<ImageView>(R.id.video_view)
-                Picasso.with(ctx).load(pic.largeResUrl).into(videoView)
-                videoView?.setOnClickListener {
-                    Log.d("TAG", "Trying to start something")
-                    val intent = Intent(ctx, VideoViewerActivity::class.java)
-                    intent.putExtra("url", pic.elementUrl)
-                    ContextCompat.startActivity(ctx, intent, null)
+
+                val imageView = v.findViewById<ImageView>(R.id.image_view)
+                val videoView = v.findViewById<StyledPlayerView>(R.id.video_view)
+                videoView.visibility = View.GONE
+
+                Picasso.with(ctx).load(pic.thumbnailUrl).into(imageView)
+
+                imageView.setOnClickListener {
+                    Log.d("PIVF", "Playing ${pic.elementUrl}")
+                    videoView.player = fragment.player
+                    fragment.player.clearMediaItems()
+                    fragment.player.addMediaItem(MediaItem.fromUri(Uri.parse(pic.elementUrl)))
+                    fragment.player.prepare()
+                    fragment.player.playWhenReady = true
+                    videoView.visibility = View.VISIBLE
+                    imageView.visibility = View.INVISIBLE
                 }
+
                 v
             } else {
                 val v: View = inflater.inflate(R.layout.image_viewer_page, container, false)
-                Picasso.with(ctx).load(pic.largeResUrl).into(v.findViewById<ZoomableImageView>(R.id.image_view))
+
+                val imageView = v.findViewById<ImageView>(R.id.image_view)
+                Picasso.with(ctx).load(pic.thumbnailUrl).into(imageView)
+                Picasso.with(ctx).load(pic.largeResUrl).into(imageView)
                 v
             }
             (container as ViewPager).addView(itemView)

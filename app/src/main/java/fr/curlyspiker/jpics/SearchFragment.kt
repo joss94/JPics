@@ -5,6 +5,7 @@ import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.EditText
 import androidx.core.widget.doOnTextChanged
 
@@ -29,5 +30,13 @@ class SearchFragment : Fragment() {
 
         keywordsEdit = view.findViewById(R.id.keywords_edit)
         keywordsEdit.doOnTextChanged { text, _, _, _ -> imagesListFragment.setFilter(text.toString()) }
+
+        val addImagesButton = view.findViewById<Button>(R.id.add_image_button)
+        addImagesButton.setOnClickListener { (activity as MainActivity).addImages(null) }
+
+        val addCategoryButton = view.findViewById<Button>(R.id.add_category_button)
+        addCategoryButton.setOnClickListener {
+            (activity as MainActivity).addCategory(null)
+        }
     }
 }

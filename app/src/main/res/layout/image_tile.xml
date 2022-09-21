@@ -20,7 +20,7 @@
         android:layout_margin="0dp"
         android:elevation="0dp">
 
-        <view class="fr.curlyspiker.jpics.ExplorerFragment$GridViewItem"
+        <view class="fr.curlyspiker.jpics.GridViewItem"
             android:id="@+id/image_tile_image"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

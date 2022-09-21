@@ -66,6 +66,15 @@ data class Picture (
         return out
     }
 
+    fun getTagsFromInfoJson() : List<Int> {
+        val out = mutableListOf<Int>()
+        val tagsArray = mInfo?.optJSONArray("tags") ?: JSONArray()
+        for(i in 0 until tagsArray.length()) {
+            out.add(tagsArray.getJSONObject(i).optInt("id"))
+        }
+        return out
+    }
+
     companion object {
         fun fromJson(json: JSONObject) : Picture {
             val id = json.optInt("id")

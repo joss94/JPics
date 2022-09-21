@@ -66,10 +66,6 @@
         app:destination="@id/loginFragment" />
 
     <action
-        android:id="@+id/action_goToAccount"
-        app:destination="@id/accountFragment" />
-
-    <action
         android:id="@+id/action_goToHome"
         app:destination="@id/homeFragment"
         app:popUpTo="@id/loginFragment"

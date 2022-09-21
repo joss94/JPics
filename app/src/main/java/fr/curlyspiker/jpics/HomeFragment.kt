@@ -4,9 +4,12 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
+import android.widget.ImageButton
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.*
+import androidx.navigation.fragment.findNavController
 import com.google.android.material.bottomnavigation.BottomNavigationView
 
 
@@ -67,6 +70,14 @@ class HomeFragment : Fragment() {
             val transaction = childFragmentManager.beginTransaction()
             transaction.add(R.id.fragment_container, albumsFragment, "explorer_fragment")
             transaction.commit()
+        }
+
+        view.findViewById<ImageButton>(R.id.account_button).setOnClickListener {
+            findNavController().navigate(HomeFragmentDirections.actionHomeFragmentToAccountFragment())
+        }
+
+        view.findViewById<ImageButton>(R.id.refresh_button).setOnClickListener {
+            (activity as MainActivity).refreshData()
         }
 
         bottomView = view.findViewById(R.id.bottom_nav)

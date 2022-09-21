@@ -1,6 +1,7 @@
 package fr.curlyspiker.jpics
 
 import android.Manifest
+import android.app.Activity
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -22,7 +23,6 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import androidx.core.view.WindowCompat
 import androidx.lifecycle.*
 import androidx.lifecycle.Observer
 import androidx.navigation.fragment.NavHostFragment
@@ -77,14 +77,20 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
         if (granted) { onPermissionsGranted() }
     }
 
+    private var onImagesPicked : (data: Intent?) -> Unit = {}
+    private var imgReq = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            onImagesPicked(result.data)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         PreferenceManager.setDefaultValues(this, R.xml.jpics_prefs, true)
 
-        WindowCompat.setDecorFitsSystemWindows(window, false)
+        //WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
-        setSupportActionBar(findViewById(R.id.my_toolbar))
 
         DatabaseProvider.initDB(applicationContext)
 
@@ -97,15 +103,6 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
         val username = prefs.getString("username", "") ?: ""
         val password = prefs.getString("password", "") ?: ""
         PiwigoServerHelper.serverUrl = url
-
-        findViewById<ImageButton>(R.id.account_button).setOnClickListener {
-            val navHostFragment = supportFragmentManager.findFragmentById(R.id.nav_host_fragment_container) as NavHostFragment
-            navHostFragment.navController.navigate(R.id.action_goToAccount)
-        }
-
-        findViewById<ImageButton>(R.id.refresh_button).setOnClickListener {
-            refreshData()
-        }
 
         progressLayout = findViewById(R.id.progress_layout)
         progressBar = findViewById(R.id.progress_bar)
@@ -163,7 +160,7 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
         PiwigoData.setProgressListener(this)
     }
 
-    override fun onStarted() {
+    override fun onTaskStarted() {
         runOnUiThread {
             progressLayout.visibility = View.VISIBLE
             progressBar.progress = 0
@@ -171,13 +168,13 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
         }
     }
 
-    override fun onCompleted() {
+    override fun onTaskCompleted() {
         runOnUiThread {
             progressLayout.visibility = View.GONE
         }
     }
 
-    override fun onProgress(progress: Float) {
+    override fun onTaskProgress(progress: Float) {
         runOnUiThread {
             val progressInt = (progress * 100).toInt()
             progressBar.progress = progressInt
@@ -194,7 +191,7 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
     fun downloadImages(pictures: List<Int>) {
 
         fun downloadImagesPermissionGranted() {
-            onStarted()
+            onTaskStarted()
 
             val path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).path + "/JPics"
             var downloaded = 0
@@ -215,11 +212,11 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
                     }
 
                     downloaded += 1
-                    onProgress(downloaded.toFloat() / pictures.size)
+                    onTaskProgress(downloaded.toFloat() / pictures.size)
                     downloadNext(index + 1)
 
                 } else {
-                    onCompleted()
+                    onTaskCompleted()
                 }
             }
             lifecycleScope.launch {
@@ -228,7 +225,6 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
         }
 
         if(ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
-            onStarted()
             downloadImagesPermissionGranted()
         }
         else {
@@ -237,51 +233,54 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
         }
     }
 
-    fun shareImages(pictures: List<Picture>) {
+    fun shareImages(ids: List<Int>) {
         val ctx = this
-        val path = cacheDir.absolutePath + File.separator + "/images"
-        val listOfUris = ArrayList<Uri>()
-        pictures.forEachIndexed { i, p ->
-            val target = object : com.squareup.picasso.Target {
-                override fun onBitmapLoaded(bitmap: Bitmap, arg1: Picasso.LoadedFrom?) {
-                    try {
-                        val folder = File(path)
-                        if(!folder.exists()) { folder.mkdirs() }
-                        val file = File(folder.path + File.separator + "image_$i.jpg")
-                        file.createNewFile()
-                        val stream = FileOutputStream(file)
-                        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
-                        stream.close()
+        lifecycleScope.launch(Dispatchers.IO) {
+            val pictures = PiwigoData.getPicturesFromIds(ids)
+            val path = cacheDir.absolutePath + File.separator + "/images"
+            val listOfUris = ArrayList<Uri>()
+            pictures.forEachIndexed { i, p ->
+                val target = object : com.squareup.picasso.Target {
+                    override fun onBitmapLoaded(bitmap: Bitmap, arg1: Picasso.LoadedFrom?) {
+                        try {
+                            val folder = File(path)
+                            if(!folder.exists()) { folder.mkdirs() }
+                            val file = File(folder.path + File.separator + "image_$i.jpg")
+                            file.createNewFile()
+                            val stream = FileOutputStream(file)
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
+                            stream.close()
 
-                        val contentUri = FileProvider.getUriForFile(
-                            ctx,
-                            "fr.curlyspiker.jpics.fileprovider",
-                            file
-                        )
-                        listOfUris.add(contentUri)
-                        if(listOfUris.size == pictures.size) {
-                            val shareIntent: Intent = Intent().apply {
-                                action = Intent.ACTION_SEND_MULTIPLE
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                type = "*/*"
-                                putParcelableArrayListExtra(Intent.EXTRA_STREAM, listOfUris)
+                            val contentUri = FileProvider.getUriForFile(
+                                ctx,
+                                "fr.curlyspiker.jpics.fileprovider",
+                                file
+                            )
+                            listOfUris.add(contentUri)
+                            if(listOfUris.size == pictures.size) {
+                                val shareIntent: Intent = Intent().apply {
+                                    action = Intent.ACTION_SEND_MULTIPLE
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    type = "*/*"
+                                    putParcelableArrayListExtra(Intent.EXTRA_STREAM, listOfUris)
+                                }
+                                try {
+                                    startActivity(Intent.createChooser(shareIntent, "Select sharing app"))
+                                } catch (e: ActivityNotFoundException) {
+                                    Toast.makeText(ctx, "No App Available", Toast.LENGTH_SHORT).show()
+                                }
                             }
-                            try {
-                                startActivity(Intent.createChooser(shareIntent, "Select sharing app"))
-                            } catch (e: ActivityNotFoundException) {
-                                Toast.makeText(ctx, "No App Available", Toast.LENGTH_SHORT).show()
-                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
                         }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
                     }
+                    override fun onBitmapFailed(errorDrawable: Drawable?) {
+                        Log.d("TAG", "Error during download !")
+                    }
+                    override fun onPrepareLoad(placeHolderDrawable: Drawable?) {}
                 }
-                override fun onBitmapFailed(errorDrawable: Drawable?) {
-                    Log.d("TAG", "Error during download !")
-                }
-                override fun onPrepareLoad(placeHolderDrawable: Drawable?) {}
+                Picasso.with(ctx).load(p.largeResUrl).into(target)
             }
-            Picasso.with(this).load(p.largeResUrl).into(target)
         }
     }
 
@@ -368,7 +367,43 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
         }
     }
 
-    fun addCategory(parent: Int) {
+    private fun addImages(currentCat: Int?, uris: List<Uri>) {
+        runOnUiThread {
+            selectCategory(currentCat ?: 0) { c ->
+                lifecycleScope.launch(Dispatchers.IO) {
+                    PiwigoData.addImagesFromContentUris(uris, contentResolver, listOf(c))
+                }
+            }
+        }
+    }
+
+    fun addImages(currentCat: Int?) {
+
+        onImagesPicked = { data ->
+            val clipData = data?.clipData
+            val singleData = data?.data
+
+            val uris = mutableListOf<Uri>()
+            if (clipData != null) {
+                for (i in 0 until clipData.itemCount) {
+                    uris.add(clipData.getItemAt(i).uri)
+                }
+            } else if (singleData != null) {
+                uris.add(singleData)
+            }
+
+            addImages(currentCat, uris)
+        }
+
+        val intent = Intent()
+        intent.type = "image/*"
+        intent.action = Intent.ACTION_GET_CONTENT
+        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+        intent.putExtra(Intent.EXTRA_TITLE, "Select images to add")
+        imgReq.launch(intent)
+    }
+
+    fun addCategory(parent: Int?) {
         val builder: AlertDialog.Builder = AlertDialog.Builder(this, R.style.AlertStyle)
         builder.setTitle("Create a new album")
 
@@ -472,8 +507,7 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
     }
 
     fun selectCategory(startCat: Int? = null, excludeList : List<Int> = listOf(), callback: (cat: Int) -> Unit) {
-        val dialog = CategoryPicker(startCat ?: 0, callback)
-        dialog.excludeCategories(excludeList)
+        val dialog = CategoryPicker(startCat ?: 0, excludeList, callback)
         dialog.show(supportFragmentManager, "cat_picker")
     }
 
@@ -510,13 +544,8 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
             startJob()
         }
         else {
-            registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
-                if (isGranted) {
-                    startJob()
-                } else {
-                    Toast.makeText(this,"Instant upload is disabled because app was not authorized access to local files", Toast.LENGTH_LONG).show()
-                }
-            }.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            onPermissionsGranted = { startJob() }
+            permissionReq.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
     }
 
@@ -611,7 +640,7 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
         }
     }
 
-    private fun refreshData() {
+    fun refreshData() {
         InstantUploadManager.getInstance(this).checkForNewImages()
         InstantUploadManager.getInstance(this).syncWithServer()
     }

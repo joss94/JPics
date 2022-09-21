@@ -29,7 +29,7 @@
             android:elevation="0dp"
             android:layout_weight="1">
 
-            <view class="fr.curlyspiker.jpics.ExplorerFragment$GridViewItem"
+            <view class="fr.curlyspiker.jpics.GridViewItem"
                 android:id="@+id/cateogry_tile_image"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"

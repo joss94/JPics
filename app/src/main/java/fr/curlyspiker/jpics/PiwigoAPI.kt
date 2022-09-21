@@ -12,14 +12,6 @@ import kotlin.coroutines.suspendCoroutine
 
 object PiwigoAPI {
 
-    class ImageUploadData (
-        val bmp: Bitmap,
-        val filename: String,
-        val date: Date,
-        val author: String = "unknown",
-        val creationDate: Date = Date(),
-        val comment: String = "")
-
     suspend fun pwgImagesGetInfo(id: Int) : JSONObject {
         val req = JSONObject()
 
@@ -421,6 +413,35 @@ object PiwigoAPI {
         }
 
         return tags
+    }
+
+    suspend fun pwgTagsGetImages(tags: List<Int>? = null, tagNames: List<String>? = null, perPage: Int = 500, page: Int = 0 ,order: String = "id"): List<Int> {
+        val req = JSONObject()
+
+        req.put("method", "pwg.tags.getImages")
+
+        tags?.let {
+            req.put("tag_id", JSONArray(tags))
+        }
+        tagNames?.let {
+            req.put("tag_name", JSONArray(tagNames))
+        }
+        req.put("page", page)
+        req.put("per_page", perPage)
+        req.put("order", order)
+
+        val rsp = PiwigoServerHelper.volleyPost(req)
+        val jsonImages = rsp.optJSONArray("images")
+        val images = mutableListOf<Int>()
+        if (jsonImages != null) {
+            for (i in 0 until jsonImages.length()) {
+                val id = jsonImages.getJSONObject(i).optInt("id", -1)
+                if (id > 0) {
+                    images.add(id)
+                }
+            }
+        }
+        return images
     }
 
     suspend fun pwgUsersGetList(): List<User> {

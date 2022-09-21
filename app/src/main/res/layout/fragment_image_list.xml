@@ -12,43 +12,6 @@
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/add_image_button"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintRight_toRightOf="parent"
-                android:elevation="10dp"
-                android:text="Add images"
-                android:background="@drawable/round_button"
-                android:contentDescription=""
-                android:layout_margin="8dp"
-                android:gravity="center"
-                android:drawableLeft="@drawable/image"/>
-
-            <Button
-                android:id="@+id/add_category_button"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintRight_toRightOf="parent"
-                android:elevation="10dp"
-                android:text="Add album"
-                android:background="@drawable/round_button"
-                android:contentDescription=""
-                android:layout_margin="8dp"
-                android:gravity="center"
-                android:drawableLeft="@drawable/folder"/>
-
-        </LinearLayout>
-
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent">

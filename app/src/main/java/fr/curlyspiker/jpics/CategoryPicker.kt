@@ -15,7 +15,6 @@ import androidx.recyclerview.widget.RecyclerView
 import com.squareup.picasso.Picasso
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.w3c.dom.Text
 
 class CatPickerViewModel: ViewModel() {
 
@@ -58,7 +57,7 @@ class CatPickerViewModel: ViewModel() {
     }
 }
 
-class CategoryPicker(private val startCat: Int = 0, private val catSelectedCb: (c: Int) -> Unit) : DialogFragment() {
+class CategoryPicker(private val startCat: Int = 0, private val excludedCats: List<Int>, private val catSelectedCb: (c: Int) -> Unit) : DialogFragment() {
 
     private val pickerVM: CatPickerViewModel by viewModels()
 
@@ -109,6 +108,7 @@ class CategoryPicker(private val startCat: Int = 0, private val catSelectedCb: (
         })
 
         pickerVM.setCurrentCat(startCat)
+        pickerVM.excludeCategories(excludedCats)
     }
 
     fun excludeCategories(cats: List<Int>) {

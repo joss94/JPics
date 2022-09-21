@@ -3,6 +3,7 @@ package fr.curlyspiker.jpics
 import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
+import android.util.Log
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
@@ -145,6 +146,8 @@ GestureDetector.OnGestureListener, GestureDetector.OnDoubleTapListener {
         mScaleDetector!!.onTouchEvent(event)
         mGestureDetector!!.onTouchEvent(event)
         val currentPoint = PointF(event.x, event.y)
+
+        Log.d("test", "$mode   -   $mSaveScale")
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 mLast.set(currentPoint)
@@ -163,7 +166,7 @@ GestureDetector.OnGestureListener, GestureDetector.OnDoubleTapListener {
             MotionEvent.ACTION_POINTER_UP -> mode = NONE
         }
         imageMatrix = mMatrix
-        return false
+        return if (mSaveScale == 1f) false else true
     }
 
     override fun onDoubleTap(motionEvent: MotionEvent): Boolean {

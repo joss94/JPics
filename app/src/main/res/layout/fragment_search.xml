@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
+
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
@@ -14,6 +15,42 @@
         android:layout_height="wrap_content"
         android:hint="Search by keywords..."
         android:layout_margin="5dp" />
+
+
+    <LinearLayout
+        android:id="@+id/add_buttons"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/add_image_button"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:elevation="10dp"
+            android:text="Add images"
+            android:background="@drawable/round_button"
+            android:contentDescription=""
+            android:layout_margin="8dp"
+            android:gravity="center"
+            android:drawableLeft="@drawable/image"/>
+
+        <Button
+            android:id="@+id/add_category_button"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:elevation="10dp"
+            android:text="Add album"
+            android:background="@drawable/round_button"
+            android:contentDescription=""
+            android:layout_margin="8dp"
+            android:gravity="center"
+            android:drawableLeft="@drawable/folder"/>
+
+    </LinearLayout>
+
 
     <androidx.fragment.app.FragmentContainerView
         android:id="@+id/image_list_fragment"
