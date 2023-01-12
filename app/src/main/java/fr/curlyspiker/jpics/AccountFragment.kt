@@ -46,5 +46,9 @@ class AccountFragment : Fragment() {
         view.findViewById<TextView>(R.id.settings_button).setOnClickListener {
             findNavController().navigate(AccountFragmentDirections.actionAccountFragmentToSettingsFragment())
         }
+
+        view.findViewById<TextView>(R.id.logs_button).setOnClickListener {
+            findNavController().navigate(AccountFragmentDirections.actionAccountFragmentToLogsFragment())
+        }
     }
 }

@@ -28,6 +28,9 @@
         <action
             android:id="@+id/action_accountFragment_to_settingsFragment"
             app:destination="@id/settingsFragment" />
+        <action
+            android:id="@+id/action_accountFragment_to_logsFragment"
+            app:destination="@id/logsFragment" />
     </fragment>
     <fragment
         android:id="@+id/archiveFragment"
@@ -39,6 +42,16 @@
         android:name="fr.curlyspiker.jpics.SyncFragment"
         android:label="fragment_sync"
         tools:layout="@layout/fragment_sync" />
+    <fragment
+        android:id="@+id/settingsFragment"
+        android:name="fr.curlyspiker.jpics.SettingsFragment"
+        android:label="fragment_settings"
+        tools:layout="@layout/fragment_settings" />
+    <fragment
+        android:id="@+id/logsFragment"
+        android:name="fr.curlyspiker.jpics.LogFragment"
+        android:label="fragment_log"
+        tools:layout="@layout/fragment_log" />
 
     <fragment
         android:id="@+id/imageViewerFragment"
@@ -70,10 +83,5 @@
         app:destination="@id/homeFragment"
         app:popUpTo="@id/loginFragment"
         app:popUpToInclusive="true" />
-    <fragment
-        android:id="@+id/settingsFragment"
-        android:name="fr.curlyspiker.jpics.SettingsFragment"
-        android:label="fragment_settings"
-        tools:layout="@layout/fragment_settings" />
 
 </navigation>

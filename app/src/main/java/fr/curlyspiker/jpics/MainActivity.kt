@@ -10,9 +10,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.net.Uri
-import android.os.Bundle
-import android.os.Environment
-import android.os.Parcelable
+import android.os.*
 import android.text.InputType
 import android.util.Log
 import android.view.View
@@ -29,7 +27,9 @@ import androidx.navigation.fragment.NavHostFragment
 import androidx.preference.PreferenceManager
 import androidx.work.*
 import com.android.volley.toolbox.Volley
-import com.squareup.picasso.Picasso
+import com.bumptech.glide.Glide
+import com.bumptech.glide.request.target.CustomTarget
+import com.bumptech.glide.request.transition.Transition
 import kotlinx.coroutines.*
 import java.io.File
 import java.io.FileOutputStream
@@ -61,6 +61,16 @@ class MainActivityViewModel : ViewModel() {
     fun setPicId(picId: Int?) {
         this.picId = picId
     }
+
+    fun putPicsToCache(ctx: Context) {
+        viewModelScope.launch(Dispatchers.IO) {
+            DatabaseProvider.db.PictureDao().getAllPictures().collect { pics ->
+                pics.forEach { p ->
+                    Glide.with(ctx).load(p.largeResUrl).preload()
+                }
+            }
+        }
+    }
 }
 
 class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
@@ -83,6 +93,9 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
             onImagesPicked(result.data)
         }
     }
+
+    private lateinit var logsHandler: Handler
+    private lateinit var logsFlusher: Runnable
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -108,9 +121,22 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
         progressBar = findViewById(R.id.progress_bar)
         progressTitle = findViewById(R.id.progress_title)
 
-        when {
+        logsHandler = Handler(Looper.getMainLooper())
+        val ctx = this
+        logsFlusher = object : Runnable {
+            override fun run() {
+                try {
+                    LogManager.flushToFile(ctx)
+                } finally {
+                    logsHandler.postDelayed(this, 1000)
+                }
+            }
+        }
+        logsFlusher.run()
+
+        when(intent?.action) {
             // Handle single image being sent
-            intent?.action == Intent.ACTION_SEND -> {
+            Intent.ACTION_SEND -> {
                 if (intent.type?.startsWith("image/") == true) {
                     (intent.getParcelableExtra<Parcelable>(Intent.EXTRA_STREAM) as? Uri)?.let { uri ->
                         handleImportImages(listOf(uri))
@@ -119,7 +145,7 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
             }
 
             // Handle multiple images being sent
-            intent?.action == Intent.ACTION_SEND_MULTIPLE -> {
+            Intent.ACTION_SEND_MULTIPLE -> {
                 if (intent.type?.startsWith("image/") == true) {
                     val uris = intent.getParcelableArrayListExtra<Parcelable>(Intent.EXTRA_STREAM)?.map { it -> it as Uri } ?: listOf()
                     handleImportImages(uris)
@@ -160,6 +186,11 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
         PiwigoData.setProgressListener(this)
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        logsHandler.removeCallbacks(logsFlusher);
+    }
+
     override fun onTaskStarted() {
         runOnUiThread {
             progressLayout.visibility = View.VISIBLE
@@ -190,7 +221,7 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
 
     fun downloadImages(pictures: List<Int>) {
 
-        fun downloadImagesPermissionGranted() {
+        requestPermissions {
             onTaskStarted()
 
             val path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).path + "/JPics"
@@ -199,7 +230,6 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
             val pics = PiwigoData.getPicturesFromIds(pictures)
             suspend fun downloadNext(index: Int = 0) {
                 if (index < pics.size) {
-                    Log.d("MA", "Downloading nb. $index")
                     val pic = pics[index]
                     var tries = 0
                     var success: Boolean? = false
@@ -208,7 +238,6 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
                         success = withTimeoutOrNull(3000L) {
                             downloadSingleImage(pic.elementUrl, path, pic.name)
                         }
-                        Log.d("MA", "Download success: $success")
                     }
 
                     downloaded += 1
@@ -223,14 +252,6 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
                 downloadNext()
             }
         }
-
-        if(ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
-            downloadImagesPermissionGranted()
-        }
-        else {
-            onPermissionsGranted = { downloadImagesPermissionGranted() }
-            permissionReq.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-        }
     }
 
     fun shareImages(ids: List<Int>) {
@@ -240,15 +261,15 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
             val path = cacheDir.absolutePath + File.separator + "/images"
             val listOfUris = ArrayList<Uri>()
             pictures.forEachIndexed { i, p ->
-                val target = object : com.squareup.picasso.Target {
-                    override fun onBitmapLoaded(bitmap: Bitmap, arg1: Picasso.LoadedFrom?) {
+                Glide.with(ctx).asBitmap().load(p.largeResUrl).into(object : CustomTarget<Bitmap>(){
+                    override fun onResourceReady(resource: Bitmap, transition: Transition<in Bitmap>?) {
                         try {
                             val folder = File(path)
                             if(!folder.exists()) { folder.mkdirs() }
                             val file = File(folder.path + File.separator + "image_$i.jpg")
                             file.createNewFile()
                             val stream = FileOutputStream(file)
-                            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
+                            resource.compress(Bitmap.CompressFormat.JPEG, 100, stream)
                             stream.close()
 
                             val contentUri = FileProvider.getUriForFile(
@@ -271,15 +292,18 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
                                 }
                             }
                         } catch (e: Exception) {
+                            LogManager.addLog("Could not load Bitmap: $e")
                             e.printStackTrace()
                         }
                     }
-                    override fun onBitmapFailed(errorDrawable: Drawable?) {
-                        Log.d("TAG", "Error during download !")
+
+                    override fun onLoadFailed(errorDrawable: Drawable?) {
+                        LogManager.addLog("Could not load Bitmap: $errorDrawable")
                     }
-                    override fun onPrepareLoad(placeHolderDrawable: Drawable?) {}
-                }
-                Picasso.with(ctx).load(p.largeResUrl).into(target)
+
+                    override fun onLoadCleared(placeholder: Drawable?) {
+                    }
+                })
             }
         }
     }
@@ -457,8 +481,9 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
     }
 
     private suspend fun downloadSingleImage(url: String, path: String, filename: String) = suspendCancellableCoroutine<Boolean>{
-        val target = object : com.squareup.picasso.Target {
-            override fun onBitmapLoaded(bitmap: Bitmap, arg1: Picasso.LoadedFrom?) {
+        val ctx = this
+        Glide.with(ctx).asBitmap().load(url).into(object : CustomTarget<Bitmap>(){
+            override fun onResourceReady(resource: Bitmap, transition: Transition<in Bitmap>?) {
                 var success = true
                 try {
                     val folder = File(path)
@@ -466,26 +491,24 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
                     val file = File(folder.path + File.separator + filename + if(filename.endsWith(".jpg")) "" else ".jpg")
                     file.createNewFile()
                     val stream = FileOutputStream(file)
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, 80, stream)
+                    resource.compress(Bitmap.CompressFormat.JPEG, 80, stream)
                     stream.close()
                 } catch (e: Exception) {
-                    Log.d("MA", "A problem occurred during download of $url!")
+                    LogManager.addLog("A problem occurred during download of $url: $e")
                     e.printStackTrace()
                     success = false
                 } finally {
-                    Log.d("MA", "Download of $url finished !")
                     it.resume(success)
                 }
             }
-            override fun onBitmapFailed(errorDrawable: Drawable?) {
-                Log.d("TAG", "Error during download !")
-                it.resume(false)
-            }
-            override fun onPrepareLoad(placeHolderDrawable: Drawable?) {}
-        }
 
-        Log.d("MA", "Downloading $url")
-        Picasso.with(this).load(url).into(target)
+            override fun onLoadFailed(errorDrawable: Drawable?) {
+                LogManager.addLog("Could not load Bitmap: $errorDrawable")
+            }
+
+            override fun onLoadCleared(placeholder: Drawable?) {
+            }
+        })
     }
 
     private fun handleImportImages(uris: List<Uri>) {
@@ -513,8 +536,7 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
 
     private fun startInstantUploadJob() {
 
-        fun startJob() {
-
+        requestPermissions {
             val prefs = getSharedPreferences("fr.curlyspiker.jpics", Context.MODE_PRIVATE)
             val c = prefs.getInt("default_album", -1)
             InstantUploadManager.getInstance(this).setDefaultCategory(c)
@@ -539,14 +561,34 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
                     instantUploadRequest
                 )
         }
+    }
 
-        if(ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
-            startJob()
+    private fun requestPermissions(callback: () -> Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if(ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED) {
+                if(ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED) {
+                    callback()
+                }
+                else {
+                    onPermissionsGranted = { requestPermissions(callback) }
+                    permissionReq.launch(Manifest.permission.READ_MEDIA_IMAGES)
+                }
+            }
+            else {
+                onPermissionsGranted = { requestPermissions(callback) }
+                permissionReq.launch(Manifest.permission.READ_MEDIA_VIDEO)
+            }
         }
         else {
-            onPermissionsGranted = { startJob() }
-            permissionReq.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            if(ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+                callback()
+            }
+            else {
+                onPermissionsGranted = { requestPermissions(callback) }
+                permissionReq.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
         }
+
     }
 
     private fun goToLogin() {
@@ -603,7 +645,7 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
     }
 
     private fun checkStatus(cb: () -> Unit) {
-
+        val ctx = this
         lifecycleScope.launch {
             val rsp = PiwigoAPI.pwgSessionGetStatus()
 
@@ -620,21 +662,22 @@ class MainActivity : AppCompatActivity(), PiwigoData.ProgressListener {
             PiwigoSession.token = rsp.optString("pwg_token")
             PiwigoSession.availableSizes = sizes.toMutableList()
             PiwigoSession.logged = PiwigoSession.user.username != "guest" && PiwigoSession.user.username != "unknown"
-            Log.d("JP", "Connected user: ${PiwigoSession.user.username}")
+            LogManager.addLog("Connected user: ${PiwigoSession.user.username}")
+
+            WorkManager.getInstance(applicationContext).cancelAllWork()
 
             if(PiwigoSession.logged) {
                 // Proceed to Home screen
                 goToHome()
 
                 // Start the worker (will trigger a first server sync)
-                WorkManager.getInstance(applicationContext).cancelAllWork()
                 startInstantUploadJob()
+
+                // Put all images to cache
+                // mainVM.putPicsToCache(ctx)
             } else {
                 // If login failed at any point, go back to login page
                 goToLogin()
-
-                // Stop instant upload job
-                WorkManager.getInstance(applicationContext).cancelAllWork()
             }
             cb()
         }

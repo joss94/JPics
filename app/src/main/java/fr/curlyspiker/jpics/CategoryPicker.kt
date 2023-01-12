@@ -12,7 +12,7 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.*
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.squareup.picasso.Picasso
+import com.bumptech.glide.Glide
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -155,7 +155,7 @@ class CategoryPicker(private val startCat: Int = 0, private val excludedCats: Li
                 vh.elementsLabel.text = if (nSubAlbums > 0) "$nSubAlbums sub-albums" else ""
 
                 if (category.thumbnailUrl.isNotEmpty()) {
-                    Picasso.with(picker.context).load(category.thumbnailUrl).into(vh.icon)
+                    Glide.with(picker.requireContext()).load(category.thumbnailUrl).into(vh.icon)
                 } else {
                     vh.icon.setImageDrawable(AppCompatResources.getDrawable(picker.requireContext(), R.drawable.image_icon))
                 }

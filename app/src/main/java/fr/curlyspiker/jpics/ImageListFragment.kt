@@ -3,12 +3,10 @@ package fr.curlyspiker.jpics
 import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Bundle
-import android.provider.ContactsContract
 import android.text.TextUtils
 import android.view.*
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
-import androidx.activity.OnBackPressedCallback
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
@@ -16,9 +14,13 @@ import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.*
 import androidx.lifecycle.Observer
+import androidx.navigation.fragment.FragmentNavigatorExtras
+import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.squareup.picasso.Picasso
+import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -26,8 +28,7 @@ import me.zhanghai.android.fastscroll.FastScrollerBuilder
 import me.zhanghai.android.fastscroll.PopupTextProvider
 import java.text.SimpleDateFormat
 import java.util.*
-import androidx.navigation.fragment.findNavController
-import androidx.recyclerview.widget.LinearLayoutManager
+
 
 class ILFViewModel(private var catId: Int?) : ViewModel() {
 
@@ -145,17 +146,6 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false, val
     private var picturesAdapter: PicturesListAdapter? = null
     private lateinit var noImageView: ImageView
 
-    private val backPressedCallback = object : OnBackPressedCallback(true) {
-        override fun handleOnBackPressed() {
-            val parent = imageListVM.getCategory().value?.category?.parentId ?: -1
-            if (PiwigoData.getCategoryFromId(parent) != null) {
-                setCategory(parent)
-            } else {
-                activity?.moveTaskToBack(true)
-            }
-        }
-    }
-
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_image_list, container, false)
     }
@@ -168,11 +158,11 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false, val
         noImageView = view.findViewById(R.id.no_image_view)
 
         picturesAdapter = PicturesListAdapter(this)
-        val layoutManager = GridLayoutManager(requireContext(), 3)
+        val layoutManager = GridLayoutManager(requireContext(), 2)
         picturesView.layoutManager = layoutManager
         layoutManager.spanSizeLookup = object: GridLayoutManager.SpanSizeLookup() {
             override fun getSpanSize(pos: Int) : Int {
-                return if(picturesAdapter?.isHeader(pos) == true) 3 else 1
+                return if(picturesAdapter?.isHeader(pos) == true) 2 else 1
             }
         }
         picturesView.adapter  = picturesAdapter
@@ -236,18 +226,6 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false, val
                 picturesAdapter?.replaceAll(pictures)
             }
         })
-
-        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, backPressedCallback)
-    }
-
-    override fun onPause() {
-        super.onPause()
-        backPressedCallback.isEnabled = false
-    }
-
-    override fun onResume() {
-        super.onResume()
-        backPressedCallback.isEnabled = true
     }
 
     fun setCategory(c: Int?) {
@@ -260,14 +238,25 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false, val
         imageListVM.setFilter(query)
     }
 
+    fun goToParent(): Boolean {
+        val parent = imageListVM.getCategory().value?.category?.parentId ?: -1
+        return if (PiwigoData.getCategoryFromId(parent) != null) {
+            setCategory(parent)
+            true
+        } else {
+            false
+        }
+    }
+
     class PicturesListAdapter(private val fragment: ImageListFragment) :
         RecyclerView.Adapter<RecyclerView.ViewHolder>(),
         SectionIndexer,
         PopupTextProvider {
 
-        private val ITEM_VIEW_TYPE_MAIN_HEADER = -1
-        private val ITEM_VIEW_TYPE_HEADER = -2
-        private val ITEM_VIEW_TYPE_ITEM = -3
+        private val ITEM_VIEW_TYPE_CATS_HEADER = -1
+        private val ITEM_VIEW_TYPE_MONTH_HEADER = -2
+        private val ITEM_VIEW_TYPE_DAY_HEADER = -3
+        private val ITEM_VIEW_TYPE_ITEM = -4
 
         sealed class DataItem {
             data class PictureItem(val picture: Picture) : DataItem() {
@@ -276,11 +265,15 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false, val
                 var checked = false
             }
 
-            data class Header(override val creationDay: Date): DataItem() {
+            data class DayHeader(override val creationDay: Date): DataItem() {
                 override val id = creationDay.hashCode().toLong()
             }
 
-            data class MainHeader(override val creationDay: Date = Date(0)): DataItem() {
+            data class MonthHeader(override val creationDay: Date): DataItem() {
+                override val id = creationDay.hashCode().toLong()
+            }
+
+            data class CatsHeader(override val creationDay: Date = Date(0)): DataItem() {
                 override val id = creationDay.hashCode().toLong()
             }
 
@@ -302,13 +295,17 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false, val
         private var pictures = listOf<Picture>()
 
         fun isHeader(pos: Int) : Boolean {
-            return items[pos] is DataItem.Header || items[pos] is DataItem.MainHeader
+            return items[pos] is DataItem.DayHeader || items[pos] is DataItem.CatsHeader
         }
 
-        private fun showImageFullscreen(position: Int) {
+        private fun showImageFullscreen(position: Int, view: View) {
             fragment.mainActivityVM.setCatId(fragment.imageListVM.getCatId())
             fragment.mainActivityVM.setPicId(getItemId(position).toInt())
             (fragment.activity as MainActivity).setDisplayedPics(fragment.imageListVM.getPictures())
+
+            val extras = FragmentNavigatorExtras(
+                view to "imageView"
+            )
             fragment.findNavController().navigate(R.id.action_showImageViewer)
         }
 
@@ -320,27 +317,37 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false, val
             pictures = picsList
             val groupedList = pictures.groupBy { p -> p.creationDay }
 
+            val groupedDays = groupedList.keys.groupBy { d ->
+                val cal = Calendar.getInstance()
+                cal.time = d
+                cal.set(Calendar.DAY_OF_MONTH, 1)
+                cal.time
+            }
+
             // Create list items
             val selected = getSelectedPictures()
 
             val newItems = mutableListOf<DataItem>()
 
             if (fragment.showAlbums)
-                newItems.add(DataItem.MainHeader())
+                newItems.add(DataItem.CatsHeader())
 
-            for(entry in groupedList.entries){
-                newItems.add(DataItem.Header(entry.key))
-                entry.value.forEach { v ->
-                    val item = DataItem.PictureItem(v)
-                    item.checked = selected.contains(v.picId)
-                    newItems.add(item)
+            for (entry in groupedDays) {
+                newItems.add(DataItem.MonthHeader(entry.key))
+                entry.value.forEach {
+                    newItems.add(DataItem.DayHeader(it))
+                    groupedList.getValue(it).forEach { v ->
+                        val item = DataItem.PictureItem(v)
+                        item.checked = selected.contains(v.picId)
+                        newItems.add(item)
+                    }
                 }
             }
 
             // Update list
             fragment.activity?.runOnUiThread {
                 items = newItems
-                sections = items.filterIsInstance<DataItem.Header>().map { it.creationDay }
+                sections = items.filterIsInstance<DataItem.MonthHeader>().map { it.creationDay }
                 notifyDataSetChanged()
 
                 val hasItems = items.isNotEmpty()
@@ -381,13 +388,17 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false, val
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
             return when (viewType) {
-                ITEM_VIEW_TYPE_MAIN_HEADER -> {
+                ITEM_VIEW_TYPE_CATS_HEADER -> {
                     val view: View =  LayoutInflater.from(fragment.requireContext()).inflate(R.layout.explorer_header, parent, false)
                     CategoriesHeaderHolder(view)
                 }
-                ITEM_VIEW_TYPE_HEADER -> {
-                    val view: View =  LayoutInflater.from(fragment.requireContext()).inflate(R.layout.section_tile, parent, false)
-                    TextViewHolder(view)
+                ITEM_VIEW_TYPE_MONTH_HEADER -> {
+                    val view: View =  LayoutInflater.from(fragment.requireContext()).inflate(R.layout.month_header, parent, false)
+                    MonthHeaderViewHolder(view)
+                }
+                ITEM_VIEW_TYPE_DAY_HEADER -> {
+                    val view: View =  LayoutInflater.from(fragment.requireContext()).inflate(R.layout.day_header, parent, false)
+                    DayHeaderViewHolder(view)
                 }
                 ITEM_VIEW_TYPE_ITEM -> {
                     val view: View =  LayoutInflater.from(fragment.requireContext()).inflate(R.layout.image_tile, parent, false)
@@ -399,11 +410,45 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false, val
 
         override fun onBindViewHolder(holder: RecyclerView.ViewHolder, p0: Int) {
 
-            when (holder) {
-                is CategoriesHeaderHolder -> holder.onViewBinded(fragment)
-                is PicViewHolder -> {
+            when (getItemViewType(p0)) {
+                ITEM_VIEW_TYPE_CATS_HEADER -> ( holder as CategoriesHeaderHolder).onViewBinded(fragment)
+                ITEM_VIEW_TYPE_MONTH_HEADER -> {
+                    holder as MonthHeaderViewHolder
+                    val headerItem = items[p0] as DataItem.MonthHeader
+                    val cal = Calendar.getInstance()
+                    val currentYear = cal.get(Calendar.YEAR)
+                    cal.time = headerItem.creationDay
+                    val headerYear = cal.get(Calendar.YEAR)
+                    var format = "MMMM"
+                    if (headerYear != currentYear)
+                        format += " yyyy"
+                    holder.label.text = SimpleDateFormat(format, Locale.US).format(headerItem.creationDay)
+                }
+                ITEM_VIEW_TYPE_DAY_HEADER -> {
+                    holder as DayHeaderViewHolder
+                    val headerItem = items[p0] as DataItem.DayHeader
+                    val cal = Calendar.getInstance()
+                    val currentYear = cal.get(Calendar.YEAR)
+                    cal.time = headerItem.creationDay
+                    val headerYear = cal.get(Calendar.YEAR)
+                    var format = "EEE. d MMM."
+                    if (headerYear != currentYear)
+                        format += " yyyy"
+                    holder.label.text = SimpleDateFormat(format, Locale.US).format(headerItem.creationDay)
+                }
+                ITEM_VIEW_TYPE_ITEM -> {
+                    holder as PicViewHolder
                     val p = items[p0] as DataItem.PictureItem
-                    Picasso.with(fragment.requireContext()).load(p.picture.thumbnailUrl).into(holder.icon)
+
+                    Glide.with(fragment.requireContext())
+                        .load(p.picture.largeResUrl)
+                        .diskCacheStrategy(DiskCacheStrategy.DATA)
+                        .thumbnail(Glide.with(fragment.requireContext())  //2
+                            .load(p.picture.thumbnailUrl) //3
+                            .diskCacheStrategy(DiskCacheStrategy.DATA)
+                            .centerCrop() //4
+                        )
+                        .into(holder.icon)
 
                     holder.checkBox.visibility = if(selecting) View.VISIBLE else View.INVISIBLE
                     holder.checkBox.isChecked = p.checked
@@ -422,14 +467,14 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false, val
                     }
 
                     holder.wideButton.setOnClickListener {
-                        showImageFullscreen(p0)
+                        showImageFullscreen(p0, holder.icon)
                     }
 
                     holder.icon.setOnClickListener {
                         if(selecting) {
                             setItemChecked(p0, !p.checked)
                         } else {
-                            showImageFullscreen(p0)
+                            showImageFullscreen(p0, holder.icon)
                         }
                     }
 
@@ -437,17 +482,6 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false, val
                         setItemChecked(p0, true)
                         true
                     }
-                }
-                is TextViewHolder -> {
-                    val headerItem = items[p0] as DataItem.Header
-                    val cal = Calendar.getInstance()
-                    val currentYear = cal.get(Calendar.YEAR)
-                    cal.time = headerItem.creationDay
-                    val headerYear = cal.get(Calendar.YEAR)
-                    var format = "EEE. d MMM."
-                    if (headerYear != currentYear)
-                        format += " yyyy"
-                    holder.label.text = SimpleDateFormat(format, Locale.US).format(headerItem.creationDay)
                 }
             }
         }
@@ -462,8 +496,9 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false, val
 
         override fun getItemViewType(position: Int): Int {
             return when (items[position]) {
-                is DataItem.MainHeader -> ITEM_VIEW_TYPE_MAIN_HEADER
-                is DataItem.Header -> ITEM_VIEW_TYPE_HEADER
+                is DataItem.CatsHeader -> ITEM_VIEW_TYPE_CATS_HEADER
+                is DataItem.MonthHeader -> ITEM_VIEW_TYPE_MONTH_HEADER
+                is DataItem.DayHeader -> ITEM_VIEW_TYPE_DAY_HEADER
                 is DataItem.PictureItem -> ITEM_VIEW_TYPE_ITEM
             }
         }
@@ -505,7 +540,11 @@ class ImageListFragment (startCat: Int? = 0, val isArchive: Boolean = false, val
         var tile: CardView = itemView.findViewById(R.id.cardview)
     }
 
-    class TextViewHolder internal constructor(itemView: View) : RecyclerView.ViewHolder(itemView) {
+    class DayHeaderViewHolder internal constructor(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        var label: TextView = itemView.findViewById(R.id.section_title)
+    }
+
+    class MonthHeaderViewHolder internal constructor(itemView: View) : RecyclerView.ViewHolder(itemView) {
         var label: TextView = itemView.findViewById(R.id.section_title)
     }
 

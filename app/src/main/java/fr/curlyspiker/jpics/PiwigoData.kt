@@ -12,6 +12,9 @@ import android.util.Base64
 import android.util.Log
 import org.json.JSONObject
 import java.io.File
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import java.util.*
 
 object PiwigoData {
@@ -57,7 +60,7 @@ object PiwigoData {
         }
     }
 
-    private suspend fun refreshCategories(cb: () -> Unit = {}) {
+    private suspend fun refreshCategories() {
         val categories = PiwigoAPI.pwgCategoriesGetList(recursive = true)
 
         // Delete cats that are not in list anymore (this includes the Home...)
@@ -69,8 +72,6 @@ object PiwigoData {
 
         // Add all new categories received from server
         DatabaseProvider.db.CategoryDao().insertOrReplace(categories)
-
-        cb()
     }
 
     private suspend fun refreshTags() {
@@ -107,7 +108,7 @@ object PiwigoData {
         DatabaseProvider.db.PictureTagDao().insertOrReplace(picTags)
     }
 
-    private suspend fun refreshPictures(cb: () -> Unit = {}): List<Picture> {
+    private suspend fun refreshPictures(): List<Picture> {
         val pictures = mutableListOf<Picture>()
         suspend fun getPicturesNextPage(page: Int = 0, perPage: Int = 500) {
             val pics = PiwigoAPI.jpicsCategoriesGetImages(null, page, perPage, "date_creation")
@@ -137,7 +138,6 @@ object PiwigoData {
         DatabaseProvider.db.PictureDao().insertOrReplace(pictures)
         DatabaseProvider.db.PictureCategoryDao().insertOrReplace(picCats)
 
-        cb()
         return pictures
     }
 
@@ -316,6 +316,11 @@ object PiwigoData {
             val bitmap = BitmapFactory.decodeFile(path)
             val date = File(path).lastModified()
 
+            val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
+            val current = LocalDateTime.ofInstant(Instant.ofEpochMilli(date),
+                TimeZone.getDefault().toZoneId()).format(formatter)
+            Log.d("TAG", current);
+
             if (filename != "") ImageUploadData(bitmap, filename, Date(date), creationDate = Date(date)) else null
         }
         addImages(imagesUploadData, cats, tags)
@@ -387,7 +392,6 @@ object PiwigoData {
                 val newId = PiwigoAPI.pwgImagesAdd(md5sum, img.filename, img.filename, img.author,
                     img.creationDate, img.comment, cats, tags)
                 if(newId > 0) {
-                    Log.d("HELLO", "Loading new picture")
                     val p = Picture.fromJson(PiwigoAPI.pwgImagesGetInfo(newId))
                     DatabaseProvider.db.PictureDao().insertOrReplace(p)
                     p.getCategoriesFromInfoJson().forEach { catId ->
@@ -490,7 +494,6 @@ object PiwigoData {
             category.getPicturesIds(true).collect {
                 val validPic = it.firstOrNull { id -> DatabaseProvider.db.PictureDao().loadOneById(id)?.thumbnailUrl?.isNotEmpty() == true }
                 if(validPic != null) {
-                    Log.d("TAG", "Setting representative for cat $cat: $validPic")
                     category.thumbnailUrl = DatabaseProvider.db.PictureDao().loadOneById(validPic)!!.thumbnailUrl
                     PiwigoAPI.pwgCategoriesSetRepresentative(cat, validPic)
                 } else {

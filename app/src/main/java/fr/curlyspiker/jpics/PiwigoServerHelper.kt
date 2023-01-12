@@ -33,7 +33,6 @@ object PiwigoServerHelper {
 
     suspend fun volleyPost(params: JSONObject) : JSONObject = suspendCoroutine {
         try {
-            Log.d("PSH", "New request: $params")
             val url = "${serverUrl}/ws.php?format=json"
             val req = object: StringRequest(
                 Method.POST, url,
@@ -49,12 +48,11 @@ object PiwigoServerHelper {
                             }
                         }
                         else {
-                            Log.d("PSH", "Reply with stat different than OK")
+                            LogManager.addLog("PiwigoServer: Reply with stat different than OK")
                             it.resumeWithException(PiwigoException("Reply with stat different than OK"))
                         }
                     } catch (e: Exception) {
-                        Log.d("PSH", "Problem parsing response: $response")
-                        Log.d("PSH", e.toString())
+                        LogManager.addLog("Piwigo Server: Problem parsing response: $response Error: $e")
                         it.resumeWithException(PiwigoException("Problem parsing response: $response"))
                     }
                 },
@@ -82,7 +80,7 @@ object PiwigoServerHelper {
             }
             requestQueue.add(req)
         } catch(e: Exception){
-            Log.d("PSH", "CAUGHT BAD EXCEPTION")
+            LogManager.addLog("Piwigo Server: CAUGHT BAD EXCEPTION: $e")
             it.resumeWithException(PiwigoException(e.toString()))
         }
     }

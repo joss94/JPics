@@ -17,6 +17,7 @@
         <entry key="app/src/main/res/drawable/ic_baseline_logo_24.xml" value="0.228" />
         <entry key="app/src/main/res/drawable/ic_baseline_refresh_24.xml" value="0.1945" />
         <entry key="app/src/main/res/drawable/ic_launcher_foreground.xml" value="0.25" />
+        <entry key="app/src/main/res/drawable/image_icon.xml" value="0.51" />
         <entry key="app/src/main/res/drawable/line.xml" value="0.21614583333333334" />
         <entry key="app/src/main/res/drawable/logo.xml" value="0.228" />
         <entry key="app/src/main/res/drawable/logo_margin.xml" value="0.228" />
@@ -49,6 +50,7 @@
         <entry key="app/src/main/res/layout/fragment_image_list.xml" value="0.25" />
         <entry key="app/src/main/res/layout/fragment_image_list_header.xml" value="0.16302083333333334" />
         <entry key="app/src/main/res/layout/fragment_image_viewer.xml" value="0.3104166666666667" />
+        <entry key="app/src/main/res/layout/fragment_log.xml" value="0.3671875" />
         <entry key="app/src/main/res/layout/fragment_login.xml" value="0.2734375" />
         <entry key="app/src/main/res/layout/fragment_search.xml" value="0.15416666666666667" />
         <entry key="app/src/main/res/layout/fragment_settings.xml" value="0.2536231884057971" />
@@ -56,6 +58,7 @@
         <entry key="app/src/main/res/layout/image_tile.xml" value="0.2916666666666667" />
         <entry key="app/src/main/res/layout/image_viewer_page.xml" value="0.19429347826086957" />
         <entry key="app/src/main/res/layout/image_viewer_page_video.xml" value="0.2293859649122807" />
+        <entry key="app/src/main/res/layout/log_message.xml" value="0.36614583333333334" />
         <entry key="app/src/main/res/layout/section_tile.xml" value="0.1" />
         <entry key="app/src/main/res/layout/syncFolderRow.xml" value="0.5432291666666667" />
         <entry key="app/src/main/res/layout/sync_folder_row.xml" value="0.19375" />

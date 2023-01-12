@@ -73,6 +73,19 @@
             android:text="Settings"
             android:background="@color/dark_gray"/>
 
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@drawable/line"
+            android:backgroundTint="@color/light_gray"/>
+
+        <TextView
+            android:id="@+id/logs_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="15dp"
+            android:text="Logs"
+            android:background="@color/dark_gray"/>
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

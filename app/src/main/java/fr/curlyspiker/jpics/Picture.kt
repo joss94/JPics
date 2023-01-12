@@ -1,17 +1,9 @@
 package fr.curlyspiker.jpics
 
 import android.annotation.SuppressLint
-import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.drawable.Drawable
-import android.util.Log
-import android.widget.Toast
 import androidx.room.*
-import com.squareup.picasso.Picasso
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.File
-import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -85,9 +77,9 @@ data class Picture (
 
             val p = Picture(id, name)
             val derivatives = json.optJSONObject("derivatives")
-            p.thumbnailUrl = derivatives?.optJSONObject("thumb")?.optString("url")?:""
-            p.largeResUrl = derivatives?.optJSONObject("xxlarge")?.optString("url")?:""
-            p.elementUrl = json.optString("element_url")
+            p.thumbnailUrl = derivatives?.optJSONObject("thumb")?.optString("url")?.replace("http", "https")?:""
+            p.largeResUrl = derivatives?.optJSONObject("xxlarge")?.optString("url")?.replace("http", "https")?:""
+            p.elementUrl = json.optString("element_url").replace("http", "https")
             p.isArchived = json.optString("is_archived", "") == "1"
 
             val creationString = json.optString("date_creation", "")

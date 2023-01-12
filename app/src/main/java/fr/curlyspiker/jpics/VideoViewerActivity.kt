@@ -20,7 +20,6 @@ class VideoViewerActivity : AppCompatActivity() {
 
         val url = intent.getStringExtra("url")
 
-        Log.d("TAG", "Now playing $url")
         val videoView = findViewById<StyledPlayerView>(R.id.video_view)
         videoView.player = player
         player.clearMediaItems()

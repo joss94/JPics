@@ -8,7 +8,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.recyclerview.widget.RecyclerView
-import com.squareup.picasso.Picasso
+import com.bumptech.glide.Glide
 
 class CategoryListAdapter(private val fragment: ImageListFragment) :
     RecyclerView.Adapter<CategoryListAdapter.ViewHolder>(){
@@ -87,7 +87,7 @@ class CategoryListAdapter(private val fragment: ImageListFragment) :
         vh.elementsLabel.text = if (nSubAlbums > 0) "$nSubAlbums sub-albums" else ""
 
         if (item.cat.thumbnailUrl.isNotEmpty()) {
-            Picasso.with(fragment.requireContext()).load(item.cat.thumbnailUrl).into(vh.icon)
+            Glide.with(fragment.requireContext()).load(item.cat.thumbnailUrl).into(vh.icon)
         } else {
             vh.icon.setImageDrawable(AppCompatResources.getDrawable(fragment.requireContext(), R.drawable.image_icon))
         }

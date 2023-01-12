@@ -32,7 +32,7 @@ data class Category (
 
             val c = Category(id, name, parentId)
             c.thumbnailId = json.optString("representative_picture_id").toIntOrNull()?:-1
-            c.thumbnailUrl = json.optString("tn_url")
+            c.thumbnailUrl = json.optString("tn_url").replace("http", "https")
             c.globalRank = json.optInt("global_rank", -1)
 
             return c

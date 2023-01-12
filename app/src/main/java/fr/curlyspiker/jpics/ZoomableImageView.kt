@@ -147,7 +147,6 @@ GestureDetector.OnGestureListener, GestureDetector.OnDoubleTapListener {
         mGestureDetector!!.onTouchEvent(event)
         val currentPoint = PointF(event.x, event.y)
 
-        Log.d("test", "$mode   -   $mSaveScale")
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 mLast.set(currentPoint)

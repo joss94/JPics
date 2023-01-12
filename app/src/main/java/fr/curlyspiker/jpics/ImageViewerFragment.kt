@@ -1,36 +1,28 @@
 package fr.curlyspiker.jpics
 
 import android.app.AlertDialog
-import android.content.ActivityNotFoundException
 import android.content.Context
-import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
-import android.util.Log
+import android.transition.TransitionInflater
 import android.view.*
 import android.widget.*
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
 import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.viewpager.widget.PagerAdapter
 import androidx.viewpager.widget.ViewPager
+import com.bumptech.glide.Glide
 import com.google.android.exoplayer2.ExoPlayer
 import com.google.android.exoplayer2.MediaItem
 import com.google.android.exoplayer2.ui.StyledPlayerView
 import com.google.android.material.bottomsheet.BottomSheetDialog
-import com.squareup.picasso.Picasso
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.io.File
-import java.io.FileOutputStream
 import java.lang.Integer.min
 import java.text.SimpleDateFormat
 import java.util.*
@@ -56,6 +48,11 @@ class ImageViewerFragment : Fragment() {
     private var currentPicId : Int = -1
 
     private lateinit var player: ExoPlayer
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        sharedElementEnterTransition = TransitionInflater.from(context).inflateTransition(android.R.transition.move)
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -241,10 +238,9 @@ class ImageViewerFragment : Fragment() {
                 val videoView = v.findViewById<StyledPlayerView>(R.id.video_view)
                 videoView.visibility = View.GONE
 
-                Picasso.with(ctx).load(pic.thumbnailUrl).into(imageView)
+                Glide.with(ctx).load(pic.thumbnailUrl).into(imageView)
 
                 imageView.setOnClickListener {
-                    Log.d("PIVF", "Playing ${pic.elementUrl}")
                     videoView.player = fragment.player
                     fragment.player.clearMediaItems()
                     fragment.player.addMediaItem(MediaItem.fromUri(Uri.parse(pic.elementUrl)))
@@ -259,8 +255,7 @@ class ImageViewerFragment : Fragment() {
                 val v: View = inflater.inflate(R.layout.image_viewer_page, container, false)
 
                 val imageView = v.findViewById<ImageView>(R.id.image_view)
-                Picasso.with(ctx).load(pic.thumbnailUrl).into(imageView)
-                Picasso.with(ctx).load(pic.largeResUrl).into(imageView)
+                Glide.with(ctx).load(pic.largeResUrl).thumbnail(Glide.with(ctx).load(pic.thumbnailUrl)).into(imageView)
                 v
             }
             (container as ViewPager).addView(itemView)

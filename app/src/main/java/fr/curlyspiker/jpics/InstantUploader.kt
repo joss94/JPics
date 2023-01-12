@@ -6,6 +6,8 @@ import android.database.Cursor
 import android.net.Uri
 import android.provider.MediaStore
 import android.util.Log
+import androidx.lifecycle.lifecycleScope
+import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -40,9 +42,8 @@ class InstantUploadManager private constructor(val context: Context) {
                 allFolders.add(SyncFolder(folderName, isIgnored))
             }
         } catch(e: Exception) {
-            Log.d("IU", "Error loading InstantUploader preferences: $e")
+            Utils.writeLog("InstantUploader -> Error loading InstantUploader preferences: $e", context)
         }
-
     }
 
     fun setDefaultCategory(id: Int?) {
@@ -125,14 +126,16 @@ class InstantUploadManager private constructor(val context: Context) {
 
     fun checkForNewImages() {
         if (defaultCatId == null) {
-            Log.d("IU", "Not checking images, default cat is null")
+            LogManager.addLog("Not checking images, default cat is null")
+            LogManager.flushToFile(context)
             return
         }
 
         val checkDate = Date()
 
 
-        Log.d("IU", "Checking for new images")
+        LogManager.addLog("Checking for new images")
+        LogManager.flushToFile(context)
         GlobalScope.launch(Dispatchers.IO) {
 
             // Get all images from device
@@ -162,11 +165,41 @@ class InstantUploadManager private constructor(val context: Context) {
                 }
                 .sortedBy { p -> File(p).lastModified() }
 
-            Log.d("IU", "Found ${notUpdated.size} images to sync")
+            LogManager.addLog("Found ${notUpdated.size} images to sync")
 
             defaultCatId?.let { catId ->
-                PiwigoData.addImagesFromFilePaths(notUpdated, listOf(catId))
-                sharedPref.edit().putLong("last_update", checkDate.time).apply()
+
+                // We need to log again in case the session has expired
+                val prefs = context.getSharedPreferences("fr.curlyspiker.jpics", Context.MODE_PRIVATE)
+                val username = prefs.getString("username", "") ?: ""
+                val password = prefs.getString("password", "") ?: ""
+
+                PiwigoAPI.pwgSessionLogin(username, password)
+                // Check status
+                val rsp = PiwigoAPI.pwgSessionGetStatus()
+
+                val sizes = mutableListOf<String>()
+                val sizesArray = rsp.optJSONArray("available_sizes")
+                if (sizesArray != null) {
+                    for (i in 0 until sizesArray.length()) {
+                        sizes.add(sizesArray[i].toString())
+                    }
+                }
+
+                PiwigoSession.user = User(-1, rsp.optString("username", "unknown"))
+                PiwigoSession.isAdmin = rsp.optString("status", "guest") == "admin"
+                PiwigoSession.token = rsp.optString("pwg_token")
+                PiwigoSession.availableSizes = sizes.toMutableList()
+                PiwigoSession.logged = PiwigoSession.user.username != "guest" && PiwigoSession.user.username != "unknown"
+                LogManager.addLog("Connected user: ${PiwigoSession.user.username}")
+
+                if(PiwigoSession.logged) {
+                    PiwigoData.addImagesFromFilePaths(notUpdated, listOf(catId))
+                    sharedPref.edit().putLong("last_update", checkDate.time).apply()
+                } else {
+                    WorkManager.getInstance(context).cancelAllWork()
+                }
+
             }
         }
     }
